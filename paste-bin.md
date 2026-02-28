@@ -106,6 +106,20 @@
 
 > 📌 Content size ảnh hưởng chủ yếu đến storage và bandwidth, không ảnh hưởng nhiều đến QPS.
 
+#### Bước 9: 📊 Bảng tổng hợp Capacity Estimation
+
+| ID | Metric | Avg | Peak | Quyết định được drive bởi số liệu này |
+|---|---|---|---|---|
+| C1 | Write QPS | ~58 | **~290** | §3.2 Chọn S3 (DB không chịu 25GB/day inline) · §10 HPA paste-service min=2, max=10 |
+| C2 | Read QPS | ~289 | **~1,445** | §3.4 Chọn cache-aside Redis · §10 HPA read-service min=3, max=20 · §10 Caching TTL strategy |
+| C3 | Content storage/year (S3) | **~9.13TB** | — | §3.2 Chọn S3 thay PostgreSQL inline · §8 S3 key prefix `YYYY/MM` tránh hot partition · §15 S3 cross-region replication |
+| C4 | Metadata storage/year (PostgreSQL) | **~547.5GB** | — | §8 Range partition monthly · §10 RDS instance sizing (db.r6g.xlarge) · §15 RDS Multi-AZ |
+| C5 | Read bandwidth/day | **200GB** | — | §10 CloudFront cache L1 giảm origin traffic · §2.2 Cost estimate CloudFront ~$300 |
+| C6 | Redis cache memory | **~18GB** | — | §10 ElastiCache sizing (r6g.large 2-node cluster) · §10 Eviction `allkeys-lru` + TTL dynamic |
+| C7 | Daily new pastes | **5M** | — | §8 Partition monthly (~150M rows/partition) · §14 Cleanup job batch size · §16 Effort sizing |
+
+> 📌 **Nguyên tắc cốt lõi**: Mỗi metric trên trực tiếp justify ít nhất một quyết định thiết kế ở §3–§16. Ngược lại, mỗi quyết định sizing/scaling phải truy nguồn về một metric trong bảng này.
+
 ## 3. ⚖️ Trade-offs
 
 ### 3.1 Bảng tổng quan quyết định
