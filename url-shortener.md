@@ -26,6 +26,7 @@
 - **Availability**: SLA 99.99% cho redirect path, 99.9% cho create/manage API.
 - **Consistency**: Read-after-write gần real-time cho link mới tạo (<1s), analytics chấp nhận eventual consistency.
 - **Security**: JWT/OAuth2 cho API quản trị, TLS end-to-end, chống abuse/spam link.
+- **Cost**: Ước lượng ~$3,000-5,000/tháng cho MVP (EKS cluster ~$800, RDS Multi-AZ r6g.large ~$600, ElastiCache r6g.large ~$400, MSK ~$500, ALB+CloudFront ~$300, S3+logging ~$200, monitoring ~$200). Scale lên peak traffic có thể đạt $8,000-12,000/tháng.
 - **Observability**: Metrics, logs, traces đầy đủ theo Golden Signals (latency, error, traffic, saturation).
 
 ### 2.3 Capacity Estimation (Back-of-the-envelope)
@@ -853,6 +854,20 @@ flowchart TB
 - Spring Cloud Gateway xử lý auth/rate-limit.
 - Service mesh (Istio hoặc Linkerd) optional cho mTLS và traffic policy nội bộ.
 
+### Resilience Patterns
+- **Circuit Breaker** (Resilience4j): redirect-service gọi Redis/PostgreSQL qua circuit breaker.
+  - Failure threshold: 50% errors trong 10 requests sliding window.
+  - Open state duration: 30s → half-open → thử 3 requests → close nếu thành công.
+  - Fallback khi Redis circuit open: đọc thẳng PostgreSQL (degraded latency nhưng vẫn redirect được).
+- **Retry with Backoff**: URL service retry gọi ID generator với exponential backoff (100ms → 200ms → 400ms, max 3 retries) + jitter ±50ms để tránh thundering herd.
+- **Bulkhead**: redirect-service và url-service dùng separate thread pools (redirect: 200 threads, url-create: 50 threads) để isolate workload, tránh create traffic ảnh hưởng redirect critical path.
+- **Timeout**: Redis GET timeout 5ms, PostgreSQL query timeout 50ms, ID generator call timeout 100ms. Nếu vượt timeout → circuit breaker ghi nhận failure.
+- **Graceful Degradation**:
+  - Redis down → fallback DB (latency tăng từ ~5ms lên ~30ms nhưng vẫn hoạt động).
+  - Kafka down → buffer click events in-memory (bounded queue 10K events) và retry publish; redirect vẫn trả response bình thường, chỉ analytics bị delay.
+  - ID generator down → url-service trả `503 Service Unavailable` với `Retry-After` header, redirect path không bị ảnh hưởng.
+- **Request Coalescing**: khi cache miss đồng thời cho cùng `short_code`, dùng singleflight pattern (chỉ 1 request đọc DB, các request khác chờ kết quả) để tránh stampede lên PostgreSQL.
+
 ## 11. 🧪 Testing Strategy
 - **Unit Testing**: JUnit 5 + Mockito cho service logic, coverage target >80%.
 - **Integration Testing**: Spring Boot Test + Testcontainers (PostgreSQL, Redis, Kafka).
@@ -868,7 +883,9 @@ flowchart TB
 - Input validation: chặn SSRF patterns, chặn private CIDR targets nếu policy yêu cầu.
 - DDoS/bot protection: WAF rate rules + AWS Shield Standard.
 - Data protection: encryption at rest (RDS/Redis/S3 KMS), encryption in transit.
+- Secrets management: DB credentials, JWT signing keys, API keys lưu trong AWS Secrets Manager; inject vào pods qua External Secrets Operator, rotate tự động mỗi 90 ngày.
 - OWASP Top 10: chống injection, broken auth, security misconfiguration qua secure defaults và SAST/DAST.
+- Compliance: hỗ trợ GDPR right-to-erasure (xóa URL + analytics data theo user request), data residency EU nếu cần qua dedicated RDS instance.
 
 ## 13. 📊 Monitoring & Logging
 ### Key Metrics
@@ -883,6 +900,16 @@ flowchart TB
 - Structured JSON logs với `traceId`, `shortCode`, `userId`, `statusCode`.
 - Log level: INFO cho business events, WARN cho retry, ERROR cho failures.
 - Centralized logging qua ELK/OpenSearch, retention theo compliance.
+
+### SLI / SLO / Error Budget (SRE)
+- **SLI redirect**: tỷ lệ redirect requests trả về `301/302/404/410` (không phải `5xx`) trong tổng redirect requests.
+- **SLI create**: p99 latency của `POST /api/v1/urls` response time.
+- **SLO redirect availability**: 99.99% → error budget = 0.01% = tối đa **4.3 phút downtime/tháng** hoặc ~4,320 failed requests/tháng (trên 43.2M requests/tháng).
+- **SLO create latency**: p99 < 300ms cho 99.5% thời gian đo trong 30 ngày rolling window.
+- **Error budget policy**:
+  - Khi error budget còn > 50%: deploy bình thường, cho phép feature releases.
+  - Khi error budget còn 20-50%: chỉ deploy với canary chặt (5% → 10% → 25% → 100%), tăng thời gian bake giữa các stage.
+  - Khi error budget cạn (< 20%): freeze feature deployments, chỉ cho phép reliability fixes và rollbacks. Postmortem bắt buộc cho mọi incident tiêu tốn > 10% error budget.
 
 ### Alerting & Incident Response
 - Alert nếu `redirect p95 > 100ms` trong 5 phút.
