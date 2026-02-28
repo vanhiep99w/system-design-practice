@@ -100,9 +100,31 @@ Khi tạo mới hoặc chỉnh sửa bài thiết kế, **BẮT BUỘC** tuân t
   3. Kết quả (bold)
   4. Peak factor (thường x3-x5) kèm kết quả peak
 
-#### Bước cuối: So sánh kịch bản
+#### Bước cuối-1: So sánh kịch bản
 - Bảng so sánh ít nhất 2 kịch bản (Base vs Conservative) để cross-check tính hợp lý
 - Dùng callout `> 📌` để ghi chú các giả định quan trọng
+
+#### Bước cuối: 📊 Bảng tổng hợp Capacity Estimation
+
+> ⚠️ **BẮT BUỘC**: Sau khi tính toán xong tất cả metrics, phải có bảng tổng hợp với cấu trúc dưới đây. Đây là **cầu nối** giữa phần estimation và toàn bộ thiết kế phía dưới.
+
+- Dùng **bảng** với cấu trúc: `ID | Metric | Avg | Peak | Quyết định được drive bởi số liệu này`
+- Mỗi metric gán **ID ngắn** (C1, C2, C3...) để các section dưới reference lại dễ dàng
+- Cột cuối **"Quyết định được drive"** liệt kê cụ thể: section nào + quyết định gì dùng con số này
+  - Ví dụ: `§3.2 Chọn Snowflake (không retry collision ở 1.7K QPS) · §10 HPA min=2, max=6`
+- **Quy tắc truy xuất**: Mỗi metric PHẢI được reference ít nhất 1 lần ở §3–§16. Nếu không drive quyết định nào → loại bỏ khỏi estimation
+
+> 📌 **Nguyên tắc cốt lõi**: Capacity estimation KHÔNG phải bài tập tính toán đơn lẻ. Mỗi con số tính ra phải **trực tiếp justify** ít nhất một quyết định thiết kế cụ thể ở các section phía dưới. Ngược lại, mỗi quyết định sizing/scaling ở §3–§16 phải **truy nguồn** về một metric trong bảng tổng hợp này.
+
+**Ví dụ bảng tổng hợp:**
+```markdown
+| ID | Metric | Avg | Peak | Quyết định được drive bởi số liệu này |
+|---|---|---|---|---|
+| C1 | Write QPS | ~347 | **~1,735** | §3.2 Chọn X thay Y (lý do ngắn) · §10 HPA service-A min=2, max=6 |
+| C2 | Read QPS | ~13,889 | **~69,445** | §3.3 Chọn caching strategy · §10 HPA service-B min=4, max=20 |
+| C3 | Storage/year | **5.48TB** | — | §8 Partition (32 × ~170GB) · §8 Shard threshold |
+| ... | ... | ... | ... | ... |
+```
 
 ## 3. ⚖️ Trade-offs
 

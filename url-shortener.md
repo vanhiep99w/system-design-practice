@@ -41,7 +41,7 @@
 |---|---|---|
 | DAU | 100M users/day | Bài toán consumer scale lớn |
 | New short URLs/day | 30M links/day | Giả sử khoảng 30% DAU tạo 1 link/ngày |
-| Avg clicks per link/day | 40 clicks | Có mix link ít click và link viral |
+| Read:Write ratio | 40:1 | Hệ thống read-heavy; cứ 1 URL tạo ra thì trung bình sinh 40 lượt redirect (tính trên toàn bộ link active, bao gồm cả link cũ lẫn mới) |
 | Avg long URL size | 300B | Kịch bản conservative (URL có query params/UTM) |
 | Metadata per URL | 200B | id, short_code, status, user_id, timestamps + overhead row/index |
 | Avg redirect payload | 1.5KB/click | Request + response headers và overhead mạng cơ bản |
@@ -56,9 +56,11 @@
 - Kết quả: **peak write QPS ~1,735**
 
 #### Bước 3: Tính read traffic (redirect)
-- Công thức click/ngày: `daily_clicks = new_urls_per_day * avg_clicks_per_link`
-- Thay số: `30,000,000 * 40 = 1,200,000,000 = 1.2B clicks/day`
-- Công thức read QPS: `read_qps_avg = daily_clicks / 86,400`
+- Công thức: `daily_redirects = new_urls_per_day * read_write_ratio`
+- Thay số: `30,000,000 * 40 = 1,200,000,000 = 1.2B redirects/day`
+
+> 📌 Đây là ước lượng tổng redirect **toàn hệ thống** (bao gồm click trên link cũ lẫn link mới), không phải 40 click/link mới. Read:Write ratio 40:1 là mức phổ biến cho URL shortener (Bitly công bố ~100:1). Chọn 40:1 là kịch bản moderate.
+- Công thức read QPS: `read_qps_avg = daily_redirects / 86,400`
 - Thay số: `1,200,000,000 / 86,400 = 13,888.9`
 - Kết quả: **read QPS trung bình ~13,889**
 - Peak factor `x5`: `13,889 * 5 = 69,445`
@@ -90,6 +92,20 @@
 |---|---|---|---|
 | Base | 120B | 320B | 9.6GB/day |
 | Conservative (đang dùng) | 300B | 500B | 15GB/day |
+
+#### 📊 Bảng tổng hợp Capacity Estimation
+
+| ID | Metric | Avg | Peak |
+|---|---|---|---|
+| C1 | Write QPS | ~347 | **~1,735** |
+| C2 | Read QPS (redirect) | ~13,889 | **~69,445** |
+| C3 | Daily storage | **15GB/day** | — |
+| C4 | Yearly / 5-year storage | **5.48TB/yr** | **~82TB/5yr** |
+| C5 | Bandwidth (redirect) | **1.8TB/day** | — |
+| C6 | Redis cache memory | **~40GB** | — |
+| C7 | Daily click events | **1.2B/day** | — |
+
+> 📌 **Quy tắc truy xuất**: Mỗi metric trong bảng trên phải được reference (dạng `[C1]`, `[C2]`...) ít nhất 1 lần ở §3–§16 để justify quyết định thiết kế. Nếu metric không drive quyết định nào → loại bỏ.
 
 ## 3. ⚖️ Trade-offs
 ### 3.1 Bảng tổng quan quyết định
@@ -232,7 +248,7 @@ insert(code, longUrl)  // unique index as safety net
 ```
 
 #### Kết luận cho bài toán này
-- **Context**: write peak ~1.7K QPS, cần latency create ổn định.
+- **Context**: write peak ~1.7K QPS `[C1]`, cần latency create ổn định.
 - **Chọn Snowflake + Base62** vì giảm retry loop và giảm query-check collision trên critical path.
 - **Lưu ý độ dài**: nếu encode full Snowflake thì code thường 10-11 ký tự; nếu bắt buộc 7-8 ký tự thì cần chiến lược khác (ví dụ random/truncate + collision check).
 - **Mitigation vận hành**:
@@ -249,7 +265,7 @@ insert(code, longUrl)  // unique index as safety net
 | SEO | Trung tính | Tốt hơn cho canonical redirect |
 
 #### Context kỹ thuật
-- Redirect là hot path (~70K QPS peak), mục tiêu chính là giảm round-trip về origin.
+- Redirect là hot path (~70K QPS peak) `[C2]`, mục tiêu chính là giảm round-trip về origin.
 - Mỗi request redirect đi qua nhiều tầng (CloudFront -> Gateway -> Redirect Service -> Redis/DB), nên tối ưu cache ở edge mang lại lợi ích lớn nhất.
 - Link short trong sản phẩm mặc định xem như immutable sau khi publish.
 
@@ -692,13 +708,14 @@ erDiagram
 
 ### Partitioning / Sharding Strategy
 - `short_urls`: hash partition theo `short_code` (32 partitions) để phân tán I/O.
+  - Tại sao 32? Từ **5.48TB raw/year** `[C4]`, mỗi partition ~170GB/year — vừa đủ nhỏ để index fit memory và vacuum hiệu quả trên RDS. Nếu dùng ít partition hơn (ví dụ 8), mỗi partition ~685GB/year sẽ gây vacuum chậm.
 - `url_stats_daily`: range partition theo `stat_date` theo tháng.
-- Nếu vượt ngưỡng single-region RDS, shard theo prefix `short_code` (application-level routing).
+- Khi nào cần shard: nếu tổng data vượt **~30TB** `[C4]` (tức khoảng năm thứ 3 theo estimate 5.48TB/year + index), cân nhắc shard theo prefix `short_code` (application-level routing) sang nhiều RDS cluster.
 
 ### Data Retention Policy
 - `short_urls`: giữ lâu dài (trừ khi user yêu cầu xóa theo compliance).
 - `url_stats_daily`: giữ chi tiết 24 tháng, sau đó rollup monthly.
-- Raw click events trong S3 lifecycle về Glacier sau 90 ngày.
+- Raw click events trong S3 lifecycle về Glacier sau 90 ngày. Với **1.2B clicks/day** `[C7]`, mỗi event ~200B → raw events ~240GB/day → ~7.2TB/tháng trước khi archive.
 
 > 💡 **Tại sao không lưu toàn bộ click events vào PostgreSQL?**
 > Redirect có QPS rất cao; ghi synchronous vào PostgreSQL sẽ tăng latency và chi phí write. Dùng Kafka + S3 data lake cho raw events giúp tách critical path và scale analytics tốt hơn.
@@ -839,14 +856,15 @@ flowchart TB
 ```
 
 ### Scaling Strategy
-- HPA theo CPU + custom metric (`redirect_rps`) cho `redirect-service`.
+- HPA theo CPU + custom metric (`redirect_rps`) cho `redirect-service`: target **peak ~70K QPS** `[C2]`. Giả sử mỗi pod xử lý ~5K RPS → cần ~14 pods peak, HPA range `min=4, max=20`.
+- HPA cho `url-service`: target **peak ~1.7K write QPS** `[C1]`. Mỗi pod ~500 RPS → cần ~4 pods peak, HPA range `min=2, max=6`.
 - VPA cho `analytics-service` (batch workload biến động).
-- PostgreSQL scale-up định kỳ + read replica scale-out cho dashboard APIs.
-- Redis shard rebalancing khi memory >70%.
+- PostgreSQL: RDS **r6g.xlarge** Multi-AZ cho primary (cần chứa **15GB/day** `[C3]` write + index). Scale-up lên r6g.2xlarge khi data vượt 10TB. Read replica cho dashboard APIs.
+- Redis shard rebalancing khi memory >70% của **~40GB** `[C6]` → alert tại **28GB used**.
 
 ### Caching Strategy
-- L1: CloudFront cache cho popular short links.
-- L2: Redis cache-aside tại redirect-service.
+- L1: CloudFront cache cho popular short links — với **1.8TB bandwidth/day** `[C5]`, CloudFront absorb 30-50% traffic giúp giảm origin bandwidth xuống ~0.9-1.3TB/day và tiết kiệm ~$200-400/tháng data transfer.
+- L2: Redis cache-aside tại redirect-service — cluster cần **~40GB** `[C6]`, chọn ElastiCache **r6g.large** (2 nodes × 26GB = 52GB usable) đủ chứa 50M hot entries + headroom.
 - Eviction policy Redis: `allkeys-lru`, TTL dynamic theo popularity.
 
 ### Load Balancing / Gateway / Mesh
@@ -872,7 +890,7 @@ flowchart TB
 - **Unit Testing**: JUnit 5 + Mockito cho service logic, coverage target >80%.
 - **Integration Testing**: Spring Boot Test + Testcontainers (PostgreSQL, Redis, Kafka).
 - **API Contract Testing**: Spring Cloud Contract giữa gateway và downstream services.
-- **Load Testing**: Gatling kịch bản 70K redirect QPS peak, xác nhận p95 < 50ms (cache hit).
+- **Load Testing**: Gatling kịch bản **70K redirect QPS** `[C2]` + **1.7K write QPS** `[C1]`, xác nhận redirect p95 < 50ms (cache hit), create p95 < 200ms.
 - **Chaos Engineering**: AWS Fault Injection Simulator để test Redis node failure, AZ outage.
 - **E2E Testing**: Playwright cho web UI tạo link + validate redirect behavior.
 
