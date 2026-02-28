@@ -77,6 +77,7 @@ Khi tạo mới hoặc chỉnh sửa bài thiết kế, **BẮT BUỘC** tuân t
 - **Availability**: SLA cụ thể (99.9%, 99.99%), có thể khác nhau cho từng path (ví dụ: read path vs write path)
 - **Consistency**: Chỉ rõ strong vs eventual cho từng loại data, kèm acceptable delay
 - **Security**: Authentication method, encryption requirements, abuse protection
+- **Cost**: Ước lượng chi phí infra hàng tháng (compute, storage, network, managed services), budget constraints
 - **Observability**: Golden Signals (latency, error, traffic, saturation), tracing strategy
 
 ### 2.3 Capacity Estimation (Back-of-the-envelope)
@@ -249,6 +250,14 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 - Gateway capabilities (auth, rate-limit, routing)
 - Service mesh (optional): mTLS, traffic policy
 
+### Resilience Patterns
+- **Circuit Breaker**: ngưỡng failure threshold, half-open/open/closed states, fallback behavior
+- **Retry with Backoff**: exponential backoff + jitter cho transient failures
+- **Bulkhead**: isolate critical paths (separate thread pools, connection pools)
+- **Timeout**: chỉ rõ timeout cho từng dependency call
+- **Graceful Degradation**: behavior khi dependency lỗi (serve stale cache, reduced functionality, static fallback)
+- **Request Coalescing / Dedup**: tránh thundering herd khi cache miss đồng thời
+
 ## 11. 🧪 Testing Strategy
 - **Unit Testing**: framework + coverage target + scope (ví dụ: service logic)
 - **Integration Testing**: framework + external dependencies (Testcontainers cho DB, Redis, Kafka)
@@ -264,6 +273,7 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 - **Input validation**: chống SSRF, injection, schema validation
 - **DDoS/bot protection**: WAF rules, Shield tier
 - **Data protection**: encryption at rest (KMS), encryption in transit
+- **Secrets management**: Vault / AWS Secrets Manager / Parameter Store cho API keys, DB credentials
 - **OWASP Top 10**: liệt kê mitigation cụ thể cho relevant items
 - **Compliance**: GDPR, data residency nếu applicable
 
@@ -280,6 +290,11 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 - Structured JSON logs với correlation fields (traceId, userId, requestId)
 - Log levels: khi nào INFO/WARN/ERROR
 - Centralized logging: ELK/OpenSearch, retention policy
+
+### SLI / SLO / Error Budget (SRE)
+- Định nghĩa **SLI** (Service Level Indicators) cho từng critical path (ví dụ: redirect success rate, create latency p99)
+- Đặt **SLO** (Service Level Objectives) cụ thể (ví dụ: 99.99% availability = max 4.3 min downtime/month)
+- Tính **Error Budget** = 100% - SLO, mô tả policy khi error budget cạn (freeze deployments, focus reliability)
 
 ### Alerting & Incident Response
 - Alert conditions cụ thể với **thresholds + time window** (ví dụ: `p95 > 100ms trong 5 phút`)
