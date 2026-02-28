@@ -4,48 +4,7 @@
 
 ## 📖 Giới Thiệu
 
-Repository này chứa các bài thực hành thiết kế hệ thống (System Design) cho các hệ thống thực tế phổ biến. Mỗi file là **một đề bài hoàn chỉnh** bao gồm:
-
-- 📋 **Yêu cầu bài toán** (Problem Statement)
-- 🔍 **Phân tích chi tiết** (Detailed Analysis)
-- 🏛️ **Thiết kế hệ thống** (System Design) theo blueprint chuẩn
-
-## 🛠️ Tech Stack Chính
-
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React (TypeScript) |
-| **Backend** | Java 17+ / Spring Boot 3.x |
-| **Database** | PostgreSQL, Redis, MongoDB (tùy bài) |
-| **Message Queue** | Apache Kafka |
-| **Cloud** | AWS (EKS, RDS, S3, SQS, CloudFront...) |
-| **Orchestration** | Kubernetes (K8s) |
-| **IaC** | Terraform |
-| **Monitoring** | Prometheus, Grafana, CloudWatch |
-
-> 💡 Ưu tiên tech stack trên, nhưng vẫn sử dụng lựa chọn tốt hơn khi phù hợp (có giải thích lý do).
-
-## 🗺️ System Design Blueprint
-
-Mỗi bài thiết kế đều tuân theo **15 bước** trong System Design Blueprint ([tham khảo](https://kathir-i.medium.com/system-design-blueprint-key-concepts-and-simplified-explanations-0e2c106a5259)):
-
-| # | Bước | Mô tả |
-|---|------|--------|
-| 1 | **Requirement Gathering & Analysis** | Thu thập và phân tích yêu cầu (Functional & Non-Functional) |
-| 2 | **Trade-offs** | Đánh giá các đánh đổi (performance vs cost, consistency vs availability...) |
-| 3 | **Defining Entities / Components** | Xác định các thành phần chính của hệ thống |
-| 4 | **Client-Server Connection** | Thiết kế giao tiếp giữa client và server (REST, WebSocket, gRPC...) |
-| 5 | **System / App Flow** | Thiết kế luồng hoạt động của hệ thống |
-| 6 | **API Modeling** | Định nghĩa API endpoints, request/response format |
-| 7 | **Data Modeling** | Thiết kế cấu trúc dữ liệu, schema, relationships |
-| 8 | **Manager Classes / Services** | Thiết kế các service classes xử lý core operations |
-| 9 | **Deciding Architecture** | Chọn kiến trúc phù hợp (Microservices, Monolith, Event-driven...) |
-| 10 | **Testing** | Chiến lược kiểm thử (Unit, Integration, Performance, Load) |
-| 11 | **Security** | Bảo mật hệ thống (Authentication, Authorization, Encryption...) |
-| 12 | **Monitoring & Logging** | Giám sát, logging, alerting |
-| 13 | **Maintenance** | CI/CD, automated testing, operational tasks |
-| 14 | **Deployment Plans** | Chiến lược triển khai (Blue-Green, Canary, Rolling...) |
-| 15 | **Effort Estimation** | Ước lượng effort, timeline, resources |
+Repository này chứa các bài thực hành thiết kế hệ thống (System Design) cho các hệ thống thực tế phổ biến. 
 
 ## 📂 Danh Sách Bài Thiết Kế
 
@@ -79,34 +38,6 @@ Mỗi bài thiết kế đều tuân theo **15 bước** trong System Design Blu
 | 14 | Google Maps | [google-maps.md](./google-maps.md) | ⭐⭐⭐⭐⭐ |
 | 15 | Payment System (VNPay/Stripe) | [payment-system.md](./payment-system.md) | ⭐⭐⭐⭐⭐ |
 
-## 📐 Template Chuẩn Cho Mỗi Bài
-
-Mỗi bài thiết kế sẽ tuân theo template sau:
-
-```markdown
-# [Tên Hệ Thống] - System Design
-
-## 1. Đề Bài (Problem Statement)
-## 2. Requirement Gathering & Analysis
-   ### 2.1 Functional Requirements
-   ### 2.2 Non-Functional Requirements
-   ### 2.3 Capacity Estimation
-## 3. Trade-offs
-## 4. Defining Entities / Components
-## 5. Client-Server Connection
-## 6. System / App Flow
-## 7. API Modeling
-## 8. Data Modeling
-## 9. Manager Classes / Services
-## 10. Architecture Design
-## 11. Testing Strategy
-## 12. Security
-## 13. Monitoring & Logging
-## 14. Maintenance
-## 15. Deployment Plans
-## 16. Effort Estimation
-```
-
 ## 🎯 Mục Tiêu
 
 - ✅ Rèn luyện tư duy thiết kế hệ thống có cấu trúc
@@ -114,13 +45,6 @@ Mỗi bài thiết kế sẽ tuân theo template sau:
 - ✅ Phân tích chi tiết các trade-off trong thực tế
 - ✅ Chuẩn bị cho phỏng vấn System Design
 - ✅ Xây dựng portfolio kiến thức system design
-
-## 🛠️ Cách Sử Dụng
-
-1. **Đọc đề bài** — Hiểu rõ yêu cầu bài toán
-2. **Tự thiết kế** — Thử thiết kế trước khi xem lời giải
-3. **So sánh** — Đối chiếu với thiết kế chi tiết trong file
-4. **Ghi chú** — Tạo notes cho những điểm cần nhớ
 
 ## 📚 Tài Liệu Tham Khảo
 
