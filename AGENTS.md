@@ -2,7 +2,7 @@
 
 ## 📋 Tổng Quan Dự Án
 
-Đây là repository chứa các bài thực hành **System Design** cho các hệ thống thực tế. Mỗi file markdown trong thư mục `designs/` là một bài thiết kế hoàn chỉnh theo chuẩn **System Design Blueprint** gồm 15 bước.
+Đây là repository chứa các bài thực hành **System Design** cho các hệ thống thực tế. Mỗi file markdown ở **root folder** là một bài thiết kế hoàn chỉnh theo chuẩn **System Design Blueprint** gồm 16 bước.
 
 ## 🛠️ Tech Stack Ưu Tiên
 
@@ -51,137 +51,273 @@ system-design-practice/
 
 ## 📐 Template Bài Thiết Kế
 
-Khi tạo mới hoặc chỉnh sửa bài thiết kế, **BẮT BUỘC** tuân theo template dưới đây. Mỗi section tương ứng với một bước trong System Design Blueprint:
+Khi tạo mới hoặc chỉnh sửa bài thiết kế, **BẮT BUỘC** tuân theo template dưới đây. Mỗi section tương ứng với một bước trong System Design Blueprint.
+
+> ⚠️ Template dưới đây mô tả **cấu trúc + hướng dẫn methodology chi tiết**. Khi viết bài thực tế, thay các hướng dẫn bằng nội dung cụ thể cho hệ thống đang thiết kế.
 
 ```markdown
 # [Tên Hệ Thống] - System Design
 
 ## 1. 📋 Đề Bài (Problem Statement)
-- Mô tả ngắn gọn về hệ thống cần thiết kế
-- Bối cảnh thực tế và tầm quan trọng
-- Phạm vi thiết kế (scope)
+- Mô tả ngắn gọn hệ thống cần thiết kế và bối cảnh thực tế
+- **Scope chính** (in scope): liệt kê rõ các chức năng nằm trong phạm vi
+- **Scope ngoài bài** (out of scope): liệt kê rõ những gì KHÔNG thiết kế để tránh scope creep
+- **Mục tiêu business**: tại sao hệ thống này cần tồn tại, giá trị mang lại
 
 ## 2. 🔍 Requirement Gathering & Analysis
 
 ### 2.1 Functional Requirements
-- Liệt kê tất cả chức năng bắt buộc
-- Ưu tiên: MUST-HAVE vs NICE-TO-HAVE
-- Mô tả rõ user interactions
+- Dùng **bảng** với 3 cột: `Priority | Requirement | Mô tả`
+- Priority: phân loại rõ `MUST-HAVE` vs `NICE-TO-HAVE`
+- Mỗi requirement phải mô tả rõ user interaction cụ thể, không chung chung
 
 ### 2.2 Non-Functional Requirements
-- **Performance**: Latency targets, throughput
-- **Scalability**: Concurrent users, data growth
-- **Availability**: Uptime SLA (99.9%, 99.99%...)
-- **Consistency**: Strong vs eventual consistency
-- **Security**: Authentication, encryption
-- **Observability**: Metrics, logs, traces
+- **Performance**: Chỉ rõ latency targets theo percentile (p95, p99), tách biệt cho từng loại operation
+- **Scalability**: Số concurrent users, peak QPS, data growth rate
+- **Availability**: SLA cụ thể (99.9%, 99.99%), có thể khác nhau cho từng path (ví dụ: read path vs write path)
+- **Consistency**: Chỉ rõ strong vs eventual cho từng loại data, kèm acceptable delay
+- **Security**: Authentication method, encryption requirements, abuse protection
+- **Observability**: Golden Signals (latency, error, traffic, saturation), tracing strategy
 
 ### 2.3 Capacity Estimation (Back-of-the-envelope)
-- Daily Active Users (DAU)
-- Queries Per Second (QPS) — read & write
-- Storage requirements (daily/monthly/yearly)
-- Bandwidth estimation
-- Memory/Cache estimation
+
+> 📌 **Methodology bắt buộc**: Tính step-by-step, mỗi bước có **công thức → thay số → kết quả**. KHÔNG đưa con số không có nguồn gốc.
+
+#### Bước 0: Quy ước đơn vị
+- Khai báo rõ quy ước: `1 day = 86,400s`, `1M = 1,000,000`, `1B = 1,000,000,000`
+- Thống nhất dùng đơn vị thập phân hay nhị phân
+
+#### Bước 1: Inputs giả định
+- Dùng bảng `Input | Giá trị | Tại sao chọn` — mỗi input phải có **justification**
+- Ví dụ inputs: DAU, actions per user per day, avg payload size, metadata size
+
+#### Bước 2-N: Tính toán từng metric
+- Mỗi metric là 1 bước riêng: Write QPS, Read QPS, Storage, Bandwidth, Cache memory
+- Format mỗi bước:
+  1. Công thức chữ
+  2. Thay số cụ thể
+  3. Kết quả (bold)
+  4. Peak factor (thường x3-x5) kèm kết quả peak
+
+#### Bước cuối: So sánh kịch bản
+- Bảng so sánh ít nhất 2 kịch bản (Base vs Conservative) để cross-check tính hợp lý
+- Dùng callout `> 📌` để ghi chú các giả định quan trọng
 
 ## 3. ⚖️ Trade-offs
-- Liệt kê các quyết định trade-off quan trọng
-- Sử dụng format: **[Option A] vs [Option B]**
-- Giải thích lý do chọn, ưu/nhược điểm
-- Ví dụ: SQL vs NoSQL, Push vs Pull, CP vs AP (CAP theorem)
+
+### 3.1 Bảng tổng quan quyết định
+- Bảng summary tất cả decisions: `Decision | Option A | Option B | Chọn | Lý do chính`
+- Bold option được chọn
+
+### 3.2+ Deep-dive từng Decision
+Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
+1. **Bảng so sánh tiêu chí**: `Tiêu chí | Option A | Option B`
+2. **"Hoạt động thế nào?"** cho mỗi option: mô tả step-by-step flow
+3. **Ví dụ với số thật**: walk-through end-to-end với data thực tế, không abstract
+4. **Pseudo-code so sánh**: code ngắn gọn cho mỗi option để thấy độ phức tạp
+5. **Kết luận**: context bài toán → chọn gì → lý do → mitigation cho nhược điểm
+6. **Callout `> 💡`** giải thích nếu dùng stack khác default
 
 ## 4. 🧩 Defining Entities / Components
-- High-level components diagram (mermaid)
-- Mô tả vai trò từng component
-- Các thành phần: Client, API Gateway, Services, Database, Cache, Queue, CDN...
+- **Component diagram** bắt buộc (mermaid flowchart/graph)
+- Sử dụng `subgraph` để nhóm theo layer (Edge, Application, Data, Async, Observability)
+- Kèm **bảng** mô tả vai trò từng component: `Component | Vai trò`
+- Các thành phần điển hình: Client, CDN/WAF, API Gateway, Services, Database, Cache, Message Queue, Observability stack
 
 ## 5. 🔗 Client-Server Connection
-- Protocol: REST / GraphQL / gRPC / WebSocket
-- Authentication: JWT / OAuth2 / API Key
-- Connection patterns: Request-Response, Pub-Sub, Streaming
-- Rate limiting & throttling strategy
+- **Protocol**: chỉ rõ từng loại connection (REST cho management, redirect cho read, WebSocket cho real-time...)
+- **Authentication**: method cụ thể (JWT, OAuth2, API Key), phân biệt endpoint nào cần auth
+- **Connection patterns**: Request-Response, Pub-Sub, Streaming — chỉ rõ dùng ở đâu
+- **Rate limiting & throttling**: chỉ rõ limit theo role (anonymous, authenticated, plan-based), thuật toán (token bucket, sliding window)
+- **Idempotency**: strategy cho các write operations (Idempotency-Key header, dedup logic)
 
 ## 6. 🔄 System / App Flow
-- User flow diagrams (mermaid sequence/flowchart)
-- Core use case flows chi tiết
-- Error handling flows
-- Edge cases
+
+### Flow 1: [Core use case chính - ví dụ: Create]
+- **Mermaid sequence diagram** bắt buộc
+- Bao gồm tất cả participants: Client, Gateway, Services, DB, Cache, Queue
+- Thể hiện rõ `alt/else` cho branching logic (ví dụ: custom alias vs auto-generated)
+
+### Flow 2: [Core use case thứ hai - ví dụ: Read/Query]
+- **Mermaid sequence diagram** bắt buộc
+- Thể hiện cache hit/miss logic
+- Thể hiện async operations (ví dụ: publish event to Kafka)
+
+### Error handling & Edge cases
+- Liệt kê từng error case cụ thể kèm HTTP status code và behavior
+- Ví dụ: not found → 404, expired → 410 Gone, conflict → 409, malformed → 400
+- Mô tả fallback behavior khi dependency lỗi (ví dụ: Redis down → fallback DB)
 
 ## 7. 📡 API Modeling
-- Endpoint definitions (method, path, params)
-- Request/Response format (JSON examples)
-- Error response format
-- Pagination, filtering, sorting strategy
-- API versioning strategy
+
+### Endpoint Definitions
+- Dùng **bảng**: `Method | Path | Auth | Mô tả`
+- Chỉ rõ auth requirement cho từng endpoint
+
+### Request/Response Examples
+- Viết **full HTTP request** bao gồm headers (Content-Type, Authorization, Idempotency-Key)
+- Viết **full JSON response** với data thực tế, không dùng placeholder `...`
+- Bao gồm cả redirect response (nếu có) với status code và headers
+
+### Error Response Format
+- Định nghĩa error schema chuẩn: `timestamp, status, error, code, message, path`
+- Ví dụ error response thực tế
+
+### Pagination / Filtering / Sorting
+- Chỉ rõ strategy: cursor-based vs offset-based (và lý do)
+- Liệt kê filter/sort fields hỗ trợ
+
+### API Versioning
+- Strategy: path-based (`/api/v1`) vs header-based
+- Deprecation policy: dual-run period bao lâu
 
 ## 8. 🗄️ Data Modeling
-- Database schema design (tables, columns, types)
-- Entity Relationship Diagram (mermaid ER diagram)
-- Indexing strategy
-- Partitioning / sharding strategy
-- Data retention policy
+
+### Database Schema
+- Viết **full SQL DDL** (CREATE TABLE) với:
+  - Data types cụ thể
+  - Constraints (PRIMARY KEY, UNIQUE, NOT NULL, CHECK)
+  - Default values
+- Mỗi bảng có schema riêng, không gộp
+
+### ER Diagram
+- **Mermaid erDiagram** bắt buộc
+- Thể hiện rõ relationship cardinality (1-1, 1-N, N-N)
+- Liệt kê columns với data type và PK/FK/UK markers
+
+### Indexing Strategy
+- Liệt kê từng index: tên, columns, loại (unique, partial, composite)
+- Giải thích mỗi index phục vụ query pattern nào
+
+### Partitioning / Sharding Strategy
+- Chỉ rõ partition key và strategy cho từng bảng (hash, range, list)
+- Mô tả khi nào cần shard (threshold) và routing strategy (application-level hay proxy)
+
+### Data Retention Policy
+- Chỉ rõ retention period cho từng loại data
+- Mô tả rollup/archival strategy (ví dụ: detail → monthly rollup → Glacier)
+
+### Callout giải thích design decisions
+- Dùng `> 💡` để giải thích tại sao chọn cách lưu trữ nhất định
 
 ## 9. ⚙️ Manager Classes / Services
-- Service decomposition (Spring Boot microservices)
-- Core service classes và responsibilities (@Service, @Component)
-- Shared/common services (Spring Security, Spring AOP logging, notification...)
-- Service communication patterns (REST via RestTemplate/WebClient, Kafka events)
-- Dependency injection & bean management
+
+### Service Decomposition
+- Liệt kê tất cả microservices với mô tả ngắn vai trò
+
+### Core Service Classes & Responsibilities
+- Liệt kê class chính với annotation Spring (`@Service`, `@Component`, `@Configuration`, `@Aspect`)
+- Mô tả responsibility cụ thể cho từng class
+
+### Backend Code Example (Java / Spring Boot)
+- Viết **code thực tế** cho core service class (không pseudo-code)
+- Bao gồm: annotations, constructor injection, business logic method
+- Code phải thể hiện rõ design decisions đã chọn ở section 3
+
+### Frontend Code Example (React + TypeScript)
+- Viết **component thực tế** cho core user interaction
+- Bao gồm: hooks, API call, basic UI rendering
+- Sử dụng functional component + TypeScript
+
+### Service Communication Patterns
+- Chỉ rõ sync vs async cho từng pair of services
+- Liệt kê shared libraries/modules
 
 ## 10. 🏛️ Architecture Design
-- Overall architecture pattern (Microservices, Monolith, Serverless...)
-- Architecture diagram chi tiết (mermaid) — chỉ rõ AWS services
-- Scaling strategy: EKS auto-scaling (HPA/VPA), RDS read replicas
-- Caching strategy: Redis (ElastiCache) — layers, eviction policy
-- Load balancing: ALB/NLB trên AWS
-- CDN strategy: CloudFront (nếu applicable)
-- Message queue: Kafka (MSK) / SQS cho event-driven components
-- Service mesh & API Gateway (Spring Cloud Gateway / AWS API Gateway)
+- Pattern chính và lý do chọn (Microservices, Monolith, Serverless...)
+- Mô tả tối ưu hóa cho critical path (ví dụ: read path vs write path)
+
+### Architecture Diagram
+- **Mermaid flowchart** bắt buộc, chi tiết với:
+  - `subgraph` cho từng layer: Internet, AWS_Edge, AWS_VPC, EKS
+  - Tên AWS services cụ thể (Route53, CloudFront, ALB, EKS, RDS, ElastiCache, MSK, S3...)
+  - Đường kết nối rõ ràng giữa components
+  - Đường metrics/logs dùng dotted line (`-.->`)
+
+### Scaling Strategy
+- HPA/VPA: trigger metric cụ thể cho từng service
+- Database scaling: scale-up, read replicas, connection pooling
+- Cache scaling: shard rebalancing, memory thresholds
+
+### Caching Strategy
+- Mô tả **multi-layer caching**: CDN (L1) → Application cache (L2) → DB
+- Eviction policy cụ thể (LRU, LFU, TTL)
+- Cache invalidation strategy
+
+### Load Balancing / Gateway / Service Mesh
+- Loại LB (ALB/NLB) và routing rules
+- Gateway capabilities (auth, rate-limit, routing)
+- Service mesh (optional): mTLS, traffic policy
 
 ## 11. 🧪 Testing Strategy
-- Unit testing: JUnit 5, Mockito — scope & coverage targets (>80%)
-- Integration testing: Spring Boot Test, Testcontainers
-- Load testing: JMeter / Gatling — performance benchmarks
-- Chaos engineering: AWS Fault Injection Simulator
-- E2E testing: Cypress/Playwright (frontend), REST Assured (API)
-- Contract testing: Spring Cloud Contract (nếu microservices)
+- **Unit Testing**: framework + coverage target + scope (ví dụ: service logic)
+- **Integration Testing**: framework + external dependencies (Testcontainers cho DB, Redis, Kafka)
+- **API Contract Testing**: giữa services (Spring Cloud Contract)
+- **Load Testing**: tool + kịch bản cụ thể (peak QPS target, latency assertion)
+- **Chaos Engineering**: tool + failure scenarios cụ thể (node failure, AZ outage, cache down)
+- **E2E Testing**: tool + critical user flows được test
 
 ## 12. 🔒 Security
-- Authentication & Authorization
-- Data encryption (at rest, in transit)
-- Input validation & sanitization
-- DDoS protection
-- Security audit & compliance
-- OWASP Top 10 considerations
+- **Authentication**: method cụ thể, phân biệt endpoint nào cần auth
+- **Authorization**: model (RBAC, owner-based, policy-based)
+- **TLS**: public HTTPS + internal mTLS (nếu service mesh)
+- **Input validation**: chống SSRF, injection, schema validation
+- **DDoS/bot protection**: WAF rules, Shield tier
+- **Data protection**: encryption at rest (KMS), encryption in transit
+- **OWASP Top 10**: liệt kê mitigation cụ thể cho relevant items
+- **Compliance**: GDPR, data residency nếu applicable
 
 ## 13. 📊 Monitoring & Logging
-- Key metrics (latency, error rate, throughput, saturation)
-- Logging strategy (structured logging, log levels)
-- Alerting rules & thresholds
-- Distributed tracing
-- Dashboard design
-- Incident response workflow
+
+### Key Metrics
+- Dùng **bảng** `Nhóm | Metrics` theo Golden Signals:
+  - Latency: p50/p95/p99 cho từng operation
+  - Traffic: RPS, connections
+  - Errors: 4xx/5xx rate, timeout rate, cache miss ratio
+  - Saturation: CPU, memory, DB connections, queue depth
+
+### Logging Strategy
+- Structured JSON logs với correlation fields (traceId, userId, requestId)
+- Log levels: khi nào INFO/WARN/ERROR
+- Centralized logging: ELK/OpenSearch, retention policy
+
+### Alerting & Incident Response
+- Alert conditions cụ thể với **thresholds + time window** (ví dụ: `p95 > 100ms trong 5 phút`)
+- Runbook outline: detect → triage → mitigate → postmortem
+- Distributed tracing: OpenTelemetry + backend (Jaeger/X-Ray)
 
 ## 14. 🔧 Maintenance
-- CI/CD pipeline: GitHub Actions / Jenkins (build → test → deploy to EKS)
-- Database migration: Flyway / Liquibase
-- Feature flag management: LaunchDarkly / custom config
-- Technical debt management
-- Documentation maintenance (Swagger/OpenAPI cho API docs)
+- **CI/CD pipeline**: stages cụ thể (`build → test → security scan → deploy`)
+- **Database migration**: tool (Flyway/Liquibase), backward-compatible strategy
+- **Dependency management**: auto-update tool (Renovate/Dependabot), SCA scanning
+- **Feature flags**: tool + use cases cụ thể
+- **Documentation**: OpenAPI/Swagger auto-publish, ADR (Architecture Decision Records)
+- **Technical debt**: review cadence + capacity allocation (ví dụ: 10-15%/sprint)
 
 ## 15. 🚀 Deployment Plans
-- Deployment strategy: Blue-Green / Canary / Rolling trên K8s
-- Rollback plan: Kubernetes rollout undo, Terraform state management
-- Infrastructure as Code: **Terraform** (VPC, EKS, RDS, ElastiCache, S3...)
-- Auto-scaling: K8s HPA/VPA + AWS Auto Scaling Groups
-- Multi-region deployment trên AWS (nếu applicable)
-- Helm charts cho K8s deployments
-- Docker multi-stage builds cho Spring Boot apps
+- **Deployment strategy**: Canary (% rollout stages) / Blue-Green / Rolling — chỉ rõ cho từng service
+- **Rollback plan**: `kubectl rollout undo`, DB migration rollback, feature flag kill-switch
+- **IaC**: Terraform modules cho từng resource (VPC, EKS, RDS, ElastiCache, MSK, S3, IAM)
+- **Auto-scaling**: HPA/VPA + Cluster Autoscaler + ASG thresholds
+- **Multi-region**: active-active vs active-passive, failover mechanism (Route53 health check)
+- **Artifacts**: Docker multi-stage build, Helm charts cho từng service
+- **Pre-prod gate**: required checks trước production (load test, smoke test, security scan)
 
 ## 16. ⏱️ Effort Estimation
-- Phase breakdown & timeline
-- Team composition & roles
-- Risk assessment
-- Dependencies & blockers
+
+### Phase Breakdown & Timeline
+- Dùng **bảng** `Phase | Duration | Deliverables`
+- Chia phase rõ ràng: Discovery → MVP → Features → Hardening → Production Readiness
+
+### Team Composition
+- Liệt kê roles + số lượng + responsibilities chính
+
+### Risk Assessment
+- Dùng **bảng** `Risk | Impact | Mitigation`
+- Ít nhất 3-5 risks cụ thể cho hệ thống đang thiết kế
+
+### Dependencies & Blockers
+- Liệt kê external dependencies (platform team, security review, budget approval...)
 ```
 
 ## 📝 Quy Tắc Viết Nội Dung
