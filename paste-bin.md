@@ -47,9 +47,11 @@
 #### Bước 1: Inputs giả định
 | Input | Giá trị | Tại sao chọn |
 |---|---|---|
-| DAU | 10M users/day | Scale trung bình, nhỏ hơn URL shortener (paste ít viral hơn) |
-| New pastes/day | 5M pastes/day | ~50% DAU tạo 1 paste/ngày |
-| Avg views per paste/day | 5 views | Paste thường chia sẻ trong nhóm nhỏ (team, forum) |
+| Daily Active Visitors (DAV) | 50M visitors/day | Bao gồm cả anonymous readers (click link từ chat, forum, StackOverflow) — chiếm phần lớn traffic |
+| DAU (registered) | 10M users/day | Subset của DAV, chỉ tính logged-in users |
+| New pastes/day | 5M pastes/day | ~50% DAU tạo 1 paste/ngày (chỉ registered + anonymous guest) |
+| Avg reads per visitor/day | 0.5 reads | Đa số anonymous visitor chỉ xem 1 paste rồi rời đi; registered user xem nhiều hơn → trung bình 0.5 |
+| Read:Write ratio | ~5:1 | Cross-check: 25M reads / 5M writes — phù hợp hệ thống read-heavy vừa phải |
 | Avg paste content size | 5KB | Code snippets, logs, configs trung bình |
 | Metadata per paste | 300B | id, short_code, title, language, visibility, user_id, timestamps, s3_key |
 | Avg read response payload | 8KB | Content + HTML wrapper + headers |
@@ -64,8 +66,9 @@
 - Kết quả: **peak write QPS ~290**
 
 #### Bước 3: Tính read traffic (view paste)
-- Công thức: `daily_views = new_pastes_per_day * avg_views_per_paste`
-- Thay số: `5,000,000 * 5 = 25,000,000 views/day`
+- Công thức: `daily_views = DAV * avg_reads_per_visitor`
+- Thay số: `50,000,000 * 0.5 = 25,000,000 views/day`
+- Cross-check: Read:Write ratio = `25M / 5M = 5:1` ✅ (phù hợp hệ thống read-heavy vừa phải)
 - Công thức: `read_qps_avg = daily_views / 86,400`
 - Thay số: `25,000,000 / 86,400 = 289.35`
 - Kết quả: **read QPS trung bình ~289**
@@ -108,15 +111,15 @@
 
 #### Bước 9: 📊 Bảng tổng hợp Capacity Estimation
 
-| ID | Metric | Avg | Peak | Quyết định được drive bởi số liệu này |
-|---|---|---|---|---|
-| C1 | Write QPS | ~58 | **~290** | §3.2 Chọn S3 (DB không chịu 25GB/day inline) · §10 HPA paste-service min=2, max=10 |
-| C2 | Read QPS | ~289 | **~1,445** | §3.4 Chọn cache-aside Redis · §10 HPA read-service min=3, max=20 · §10 Caching TTL strategy |
-| C3 | Content storage/year (S3) | **~9.13TB** | — | §3.2 Chọn S3 thay PostgreSQL inline · §8 S3 key prefix `YYYY/MM` tránh hot partition · §15 S3 cross-region replication |
-| C4 | Metadata storage/year (PostgreSQL) | **~547.5GB** | — | §8 Range partition monthly · §10 RDS instance sizing (db.r6g.xlarge) · §15 RDS Multi-AZ |
-| C5 | Read bandwidth/day | **200GB** | — | §10 CloudFront cache L1 giảm origin traffic · §2.2 Cost estimate CloudFront ~$300 |
-| C6 | Redis cache memory | **~18GB** | — | §10 ElastiCache sizing (r6g.large 2-node cluster) · §10 Eviction `allkeys-lru` + TTL dynamic |
-| C7 | Daily new pastes | **5M** | — | §8 Partition monthly (~150M rows/partition) · §14 Cleanup job batch size · §16 Effort sizing |
+| ID | Metric | Avg | Peak |
+|---|---|---|---|
+| C1 | Write QPS | ~58 | **~290** |
+| C2 | Read QPS | ~289 | **~1,445** |
+| C3 | Content storage/year (S3) | **~9.13TB** | — |
+| C4 | Metadata storage/year (PostgreSQL) | **~547.5GB** | — |
+| C5 | Read bandwidth/day | **200GB** | — |
+| C6 | Redis cache memory | **~18GB** | — |
+| C7 | Daily new pastes | **5M** | — |
 
 > 📌 **Nguyên tắc cốt lõi**: Mỗi metric trên trực tiếp justify ít nhất một quyết định thiết kế ở §3–§16. Ngược lại, mỗi quyết định sizing/scaling phải truy nguồn về một metric trong bảng này.
 
@@ -257,19 +260,12 @@ flowchart TB
         ANALYTICS[Analytics Service]
     end
 
-    subgraph Observability["Observability"]
-        PROM[Prometheus]
-        GRAF[Grafana]
-        ELK[ELK Stack]
-    end
-
     CDN --> WAF --> GW
     GW --> PS
     GW --> RS
     GW --> US
     PS --> DB
     PS --> S3
-    PS --> CACHE
     RS --> CACHE
     RS --> DB
     RS --> S3
@@ -278,12 +274,6 @@ flowchart TB
     CS --> S3
     KAFKA --> ANALYTICS
     ANALYTICS --> DB
-
-    PS -.metrics.-> PROM
-    RS -.metrics.-> PROM
-    PROM -.-> GRAF
-    PS -.logs.-> ELK
-    RS -.logs.-> ELK
 ```
 
 | Component | Vai trò |
@@ -1025,7 +1015,6 @@ flowchart TB
     GW --> US
     PS --> S3
     PS --> RDS
-    PS --> REDIS
     RS --> REDIS
     RS --> RDS
     RS --> S3
@@ -1224,3 +1213,152 @@ flowchart TB
 - Cần domain + TLS certificate + WAF policy approved.
 - Cần Kafka topic provisioning và retention policy agreement với platform team.
 - Cần budget approval cho MSK, ElastiCache, và S3 cross-region replication (nếu multi-region).
+
+## 17. 💰 Cost Estimation & Optimization
+
+### 17.1 Chi phí hàng tháng theo từng resource
+
+> 📌 Giá tham chiếu theo **AWS On-Demand** ở region `ap-southeast-1` (Singapore). Sizing truy nguồn về Capacity Estimation §2.3.
+
+**Compute**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| EKS Control Plane | Managed | 1 cluster | $73 | $73 | Fixed cost |
+| Read Service pods | c6g.large (2 vCPU, 4GB) | 3–20 pods | ~$50/node | $150–$400 | HPA theo read QPS [C2] |
+| Paste Service pods | c6g.large | 2–10 pods | ~$50/node | $100–$200 | HPA theo write QPS [C1] |
+| User Service pods | t3.medium (2 vCPU, 4GB) | 2 pods | ~$30/node | $60 | Low traffic |
+| Analytics Service pods | r6g.medium (1 vCPU, 8GB) | 2 pods | ~$45/node | $90 | Kafka consumer, memory-intensive |
+| Cleanup CronJob | t3.small | 1 pod (intermittent) | ~$15 | $15 | Chạy mỗi 15 phút |
+| Gateway pods | c6g.medium | 2–4 pods | ~$25/node | $50–$100 | Routing + rate limiting |
+| **Subtotal Compute** | | | | **$538–$938** | |
+
+**Database**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| RDS PostgreSQL Multi-AZ | db.r6g.xlarge (4 vCPU, 32GB) | 1 primary + 1 standby | $548 x 2 | $1,096 | Metadata ~547GB/year [C4] |
+| RDS Read Replica | db.r6g.large (2 vCPU, 16GB) | 1 | $274 | $274 | List/search queries |
+| RDS Storage (gp3) | 500GB initial | — | $0.08/GB | $40 | Auto-scale khi cần |
+| **Subtotal Database** | | | | **$1,410** | |
+
+**Cache**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| ElastiCache Redis | r6g.large (2 vCPU, 13GB) | 2-node cluster (primary + replica) | $219/node | $438 | ~18GB cache [C6] |
+| **Subtotal Cache** | | | | **$438** | |
+
+**Message Queue**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| Amazon MSK | kafka.m5.large (2 vCPU, 8GB) | 3 brokers (multi-AZ) | $130/broker | $390 | View events + create events |
+| MSK Storage | 100GB/broker | 3 | $0.10/GB | $30 | Retention 7 ngày |
+| **Subtotal Message Queue** | | | | **$420** | |
+
+**Network / CDN**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| CloudFront | ~200GB/day data transfer [C5] | ~6TB/month | ~$0.085/GB (first 10TB) | $510 | Cache ratio ~60% giảm origin traffic |
+| ALB | Standard | 1 | $22 + LCU | $50 | LCU based on request count |
+| NAT Gateway | Standard | 2 (multi-AZ) | $32 + data | $100 | Outbound traffic cho pods |
+| Route53 | Hosted zone + queries | 1 zone | $0.50 + queries | $5 | |
+| **Subtotal Network** | | | | **$665** | |
+
+**Storage**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| S3 Standard | ~25GB/day compressed → ~250GB/month active | Growing | $0.025/GB | $6 (month 1) → $75 (year 1) | Content store [C3], gzip ~3:1 |
+| S3 Glacier | Archived expired pastes | — | $0.005/GB | ~$10 | After 1 year inactive |
+| S3 Requests | PUT ~5M/month, GET ~750M/month | — | $0.005/1K PUT, $0.0004/1K GET | $325 | GET giảm nhờ CloudFront cache |
+| **Subtotal Storage** | | | | **$341–$410** | |
+
+**Monitoring / Logging**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| CloudWatch | Metrics + logs | — | — | $80 | Custom metrics + log ingestion |
+| Amazon Managed Grafana | 1 workspace | 1 | $9/editor | $27 | 3 editors |
+| Amazon Managed Prometheus | Metrics ingestion | — | $0.003/10K samples | $50 | ~500 metrics |
+| OpenSearch (logs) | t3.medium.search | 2 nodes | $54/node | $108 | 30-day retention hot |
+| **Subtotal Monitoring** | | | | **$265** | |
+
+**Misc**
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| AWS WAF | Web ACL + rules | 1 ACL, 5 rules | $5 ACL + $1/rule | $10 | Rate limit + bot protection |
+| AWS Secrets Manager | Secrets | 5 secrets | $0.40/secret | $2 | DB creds, JWT keys, S3 keys |
+| ECR | Container images | — | $0.10/GB | $5 | ~50GB images |
+| **Subtotal Misc** | | | | **$17** | |
+
+### 17.2 Tổng hợp cost theo giai đoạn
+
+| Giai đoạn | Monthly Cost | Annual Cost | Ghi chú |
+|---|---|---|---|
+| **MVP** (low traffic, 10% peak) | ~$2,800 | ~$33,600 | Min replicas, single read replica, nhỏ S3 |
+| **Growth** (avg traffic) | ~$4,100 | ~$49,200 | Mid-range scaling, S3 tăng dần |
+| **Peak / Scale** (peak traffic) | ~$6,500 | ~$78,000 | Max HPA, full CDN bandwidth, large S3 |
+
+### 17.3 Cost Breakdown theo category
+
+| Category | % tổng cost (Growth) |
+|---|---|
+| Database (RDS) | ~34% |
+| Compute (EKS pods) | ~18% |
+| Network / CDN | ~16% |
+| Cache (ElastiCache) | ~11% |
+| Message Queue (MSK) | ~10% |
+| Storage (S3) | ~5% |
+| Monitoring / Logging | ~5% |
+| Misc | ~1% |
+
+> 📌 **Database chiếm tỷ trọng lớn nhất** (~34%). Đây là target ưu tiên cho cost optimization (Reserved Instances, right-sizing).
+
+### 17.4 Cost Optimization Strategies
+
+| Strategy | Mô tả | Tiết kiệm ước tính | Trade-off |
+|---|---|---|---|
+| **Reserved Instances (1-year)** | RI cho RDS, ElastiCache, MSK — workload ổn định 24/7 | ~30-40% DB + cache = **~$700/tháng** | Commit 1 năm, mất flexibility |
+| **Savings Plans (Compute)** | Compute Savings Plan cho EKS node groups | ~20-30% compute = **~$150/tháng** | Commit 1-3 năm |
+| **Spot Instances** | Dùng cho Analytics Service, Cleanup CronJob (fault-tolerant) | ~60-70% cho spot workload = **~$60/tháng** | Có thể bị interrupt, cần retry logic |
+| **Right-sizing RDS** | Start db.r6g.large (MVP) → upgrade lên xlarge khi cần | **~$500/tháng** ở MVP phase | Monitor performance sát |
+| **CloudFront cache optimization** | Tăng cache hit ratio từ 60% → 80% cho public/unlisted pastes | ~$100/tháng bandwidth saving | Stale content tối đa TTL window |
+| **S3 Intelligent-Tiering** | Tự động move infrequent access content xuống cheaper tier | ~20-30% S3 storage cost | Access latency tăng cho cold objects |
+| **VPC Endpoints** | S3 Gateway Endpoint thay NAT Gateway cho S3 traffic | ~$50/tháng NAT data cost | Không có |
+| **Log sampling** | Sample 10% debug logs, 100% error/warn logs ở production | ~$30/tháng log ingestion | Mất context khi debug |
+| **Scale-to-zero** | Analytics Service + Cleanup ngoài peak → scale về 0 (KEDA) | ~$40/tháng | Delay khi cold start |
+
+### 17.5 Cost Projection (12-24 tháng)
+
+Giả sử traffic tăng **20%/quý**:
+
+| Tháng | Traffic estimate | Infra changes | Monthly Cost |
+|---|---|---|---|
+| 1-3 (MVP) | 10% peak QPS | Min sizing, single region | ~$2,800 |
+| 4-6 | 25% peak QPS | Scale up Read Service replicas | ~$3,200 |
+| 7-9 | 50% peak QPS | Upgrade RDS → r6g.xlarge, thêm read replica | ~$4,100 |
+| 10-12 | 75% peak QPS | Redis cluster scale, thêm EKS nodes | ~$5,200 |
+| 13-18 | 100% peak QPS | Full HPA range, CDN bandwidth tăng | ~$6,500 |
+| 19-24 | 120% peak QPS | Evaluate DB sharding, thêm AZ, multi-region DR | ~$8,000 |
+
+> 📌 **Điểm inflection chính**: tháng 7-9 cần upgrade RDS (cost jump ~$500/tháng), tháng 19+ cần evaluate sharding strategy nếu metadata > 1TB.
+
+### 17.6 Cost Alerts & Governance
+
+- **AWS Budget alerts**:
+  - 80% budget ($3,280): email notification cho tech lead + DevOps.
+  - 100% budget ($4,100): alert Slack channel + email manager.
+  - 120% budget ($4,920): auto-trigger cost review meeting.
+- **Quy trình review cost**:
+  - **Monthly**: DevOps engineer review cost dashboard, identify anomalies (>10% unexpected increase).
+  - **Quarterly**: Tech lead + PM review cost projection, adjust RI/SP commitments, right-sizing audit.
+- **Tagging strategy**: tất cả resources tagged theo:
+  - `team:paste-bin`
+  - `service:{paste-service|read-service|analytics-service|...}`
+  - `environment:{dev|staging|production}`
+  - `cost-center:engineering`
+- **Cost allocation**: AWS Cost Explorer filtered theo tags, monthly report chia cost theo service để identify service nào tăng bất thường.
