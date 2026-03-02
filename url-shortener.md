@@ -105,7 +105,6 @@
 | C6 | Redis cache memory | **~40GB** | — |
 | C7 | Daily click events | **1.2B/day** | — |
 
-> 📌 **Quy tắc truy xuất**: Mỗi metric trong bảng trên phải được reference (dạng `[C1]`, `[C2]`...) ít nhất 1 lần ở §3–§16 để justify quyết định thiết kế. Nếu metric không drive quyết định nào → loại bỏ.
 
 ## 3. ⚖️ Trade-offs
 ### 3.1 Bảng tổng quan quyết định
@@ -393,6 +392,13 @@ Nếu không cache:
 - Với URL shortener, write ít hơn read rất nhiều; lợi ích write-through không bù được chi phí vận hành.
 - Cache-aside cho phép chỉ cache những key thật sự được đọc (hot keys).
 
+#### TTL Strategy
+- **Link không có expiration**: TTL mặc định **24h** + jitter ngẫu nhiên ±10-20% (ví dụ: `24h ± ~2.5h`). Vì `long_url` gần như không đổi sau khi tạo, TTL dài giúp tối đa cache hit ratio và giảm DB load. Khi link bị disable/delete thì invalidate cache key ngay lập tức.
+- **Link có `expires_at`**: TTL = `min(default_ttl, expires_at - now)` để cache tự hết hạn đúng lúc link expire, tránh serve redirect cho link đã hết hạn.
+- **Hot keys (viral links)**: kết hợp local L1 cache (TTL ~30s) + Redis để tránh single Redis key bị quá tải. Redis TTL vẫn giữ 24h.
+
+> 📌 Jitter ngẫu nhiên rất quan trọng: nếu nhiều hot keys cùng hết TTL đồng thời sẽ gây **cache stampede** — hàng loạt request đồng thời đổ xuống DB.
+
 #### Failure scenarios và mitigation
 - **Cache stampede khi hot key vừa hết TTL**:
   - Dùng request coalescing/single-flight.
@@ -475,12 +481,12 @@ flowchart LR
     CF --> ALB[ALB]
     ALB --> GW[Spring Cloud Gateway]
 
-    GW --> URLSVC[URL Management Service]
+    GW --> RL_REDIS[(ElastiCache Redis Rate Limit)]
+    GW --> URLSVC[URL Management Service\n+ ID Generator lib]
     GW --> REDIRSVC[Redirect Service]
 
-    URLSVC --> IDSVC[ID Generator Service]
     URLSVC --> PG[(PostgreSQL RDS)]
-    REDIRSVC --> REDIS[(ElastiCache Redis)]
+    REDIRSVC --> REDIS[(ElastiCache Redis\nRedirect Cache)]
     REDIRSVC --> PG
 
     REDIRSVC --> KAFKA[(Kafka / MSK)]
@@ -497,11 +503,14 @@ flowchart LR
 |---|---|
 | CloudFront + WAF | Edge caching, DDoS/basic bot protection, giảm latency toàn cầu |
 | Spring Cloud Gateway | API routing, auth filter, rate limiting |
-| URL Management Service | Create/update/delete URL, custom alias validation |
+| URL Management Service | Create/update/delete URL, custom alias validation, sinh Snowflake ID (embedded library) |
 | Redirect Service | Resolve short code và trả redirect response cực nhanh |
 | Redis | Cache mapping `short_code -> long_url` cho hot traffic |
 | PostgreSQL | Source of truth cho URL metadata, ownership, expiration |
 | Kafka + Analytics Service | Thu click events async, aggregate số liệu |
+
+> 💡 **Tại sao nhúng ID Generator vào URL Management Service thay vì tách riêng?**
+> Ở giai đoạn MVP, chỉ có URL Service cần sinh Snowflake ID. Nhúng dưới dạng embedded library (mỗi pod tự quản lý `workerId` qua lease từ DB hoặc K8s ordinal index) giúp: (1) giảm 1 network hop trên write path, (2) giảm độ phức tạp vận hành. Khi hệ thống scale lên và có nhiều service cần sinh ID, có thể tách ra thành standalone ID Generator Service để tái sử dụng và quản lý `workerId` tập trung.
 
 ## 5. 🔗 Client-Server Connection
 - **Protocol**:
@@ -517,6 +526,13 @@ flowchart LR
   - Anonymous create API: 30 req/min/IP.
   - Authenticated users: theo plan (Free/Pro/Enterprise).
   - Dùng Redis token bucket ở Gateway.
+
+> 💡 **Gateway Redis vs Redirect Redis — tách riêng hay dùng chung?**
+> Tách thành **2 ElastiCache cluster riêng biệt**:
+> - **Rate-limit Redis** (nhỏ, ví dụ `r6g.large` ~13GB): chỉ phục vụ Gateway, workload write-heavy (`INCR` + `EXPIRE`), key TTL ngắn (~1 phút), cần vài GB RAM.
+> - **Redirect cache Redis** (lớn, ví dụ `r6g.xlarge` × nhiều shard, tổng ~40GB `[C6]`): phục vụ Redirect Service, workload read-heavy (`GET/SET`), TTL dài (~24h).
+>
+> Lý do tách: (1) **failure isolation** — Redis rate-limit lỗi không ảnh hưởng redirect cache và ngược lại; (2) **workload khác biệt** — chung cluster gây memory fragmentation và khó tune riêng; (3) **sizing khác nhau** — rate-limit chỉ cần vài GB, redirect cache cần ~40GB.
 - **Idempotency**:
   - Hỗ trợ `Idempotency-Key` cho `POST /api/v1/urls` để tránh tạo trùng khi retry.
 
@@ -707,10 +723,48 @@ erDiagram
 - `INDEX idx_url_stats_daily_date` trên `(stat_date)` cho báo cáo theo ngày.
 
 ### Partitioning / Sharding Strategy
-- `short_urls`: hash partition theo `short_code` (32 partitions) để phân tán I/O.
-  - Tại sao 32? Từ **5.48TB raw/year** `[C4]`, mỗi partition ~170GB/year — vừa đủ nhỏ để index fit memory và vacuum hiệu quả trên RDS. Nếu dùng ít partition hơn (ví dụ 8), mỗi partition ~685GB/year sẽ gây vacuum chậm.
-- `url_stats_daily`: range partition theo `stat_date` theo tháng.
-- Khi nào cần shard: nếu tổng data vượt **~30TB** `[C4]` (tức khoảng năm thứ 3 theo estimate 5.48TB/year + index), cân nhắc shard theo prefix `short_code` (application-level routing) sang nhiều RDS cluster.
+
+#### Hash Partition cho `short_urls`
+- PostgreSQL hỗ trợ **declarative partitioning**: ta tự định nghĩa số partition khi tạo bảng, PostgreSQL tự động route row vào đúng partition dựa trên hash value.
+
+```sql
+-- Bảng cha: khai báo partition strategy
+CREATE TABLE short_urls (
+    id BIGINT NOT NULL,
+    short_code VARCHAR(16) NOT NULL,
+    long_url TEXT NOT NULL,
+    user_id BIGINT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    expires_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+) PARTITION BY HASH (short_code);
+
+-- Tạo 32 partition con
+CREATE TABLE short_urls_p0  PARTITION OF short_urls FOR VALUES WITH (MODULUS 32, REMAINDER 0);
+CREATE TABLE short_urls_p1  PARTITION OF short_urls FOR VALUES WITH (MODULUS 32, REMAINDER 1);
+-- ... (tương tự cho p2 đến p30)
+CREATE TABLE short_urls_p31 PARTITION OF short_urls FOR VALUES WITH (MODULUS 32, REMAINDER 31);
+```
+
+- App vẫn query bảng `short_urls` bình thường, PostgreSQL tự route: `hash(short_code) MOD 32` → đúng partition.
+
+#### Tại sao chọn 32 partitions?
+
+| Số partition | Data/partition/year (5.48TB total `[C4]`) | Đánh giá |
+|---|---|---|
+| 8 | ~685GB | Quá lớn, vacuum chậm, index khó fit RAM |
+| **32** | **~170GB** | Vừa phải, vacuum nhanh, index fit RAM trên RDS `r6g.large` |
+| 64 | ~85GB | Nhỏ hơn nhưng overhead quản lý nhiều partition, metadata tăng |
+
+> ⚠️ **Lưu ý**: Số hash partition trong PostgreSQL **không thể thay đổi sau khi tạo**. Chọn sai phải migrate toàn bộ data → nên chọn dư hơn một chút ngay từ đầu.
+
+#### Range Partition cho `url_stats_daily`
+- `url_stats_daily`: range partition theo `stat_date` theo tháng — dễ drop partition cũ khi retention hết hạn.
+
+#### Khi nào cần Sharding (nhiều RDS cluster)?
+- Nếu tổng data vượt **~30TB** `[C4]` (tức khoảng năm thứ 3 theo estimate 5.48TB/year + index), cân nhắc shard theo prefix `short_code` (application-level routing) sang nhiều RDS cluster.
+- Partitioning (chia nhỏ trong 1 DB instance) và sharding (chia sang nhiều DB instance) là 2 bước khác nhau — partitioning giải quyết vấn đề vacuum/index, sharding giải quyết vấn đề vượt giới hạn phần cứng 1 instance.
 
 ### Data Retention Policy
 - `short_urls`: giữ lâu dài (trừ khi user yêu cầu xóa theo compliance).
@@ -982,3 +1036,143 @@ flowchart TB
 - Cần IAM/security baseline từ platform team trước khi lên production.
 - Cần domain + TLS certificate + WAF policy approved.
 - Cần budget approval cho MSK và cross-region DR.
+
+## 17. 💰 Cost Estimation & Optimization
+
+### 17.1 Chi phí hàng tháng theo từng resource (AWS On-Demand, region `ap-southeast-1`)
+
+#### Compute (EKS)
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| EKS Control Plane | Managed | 1 | ~$73 | **$73** | Cố định |
+| Redirect Service nodes | c6g.xlarge (4 vCPU, 8GB) | 4-20 pods, cần ~4 nodes avg | ~$100/node | **$400** | HPA min=4, max=20 `[C2]` peak ~70K QPS |
+| URL Service nodes | c6g.large (2 vCPU, 4GB) | 2-6 pods, cần ~2 nodes avg | ~$62/node | **$124** | HPA min=2, max=6 `[C1]` peak ~1.7K QPS |
+| Gateway nodes | c6g.large | 2 nodes (HA) | ~$62/node | **$124** | Always-on, rate limiting |
+| Analytics Service nodes | c6g.large | 2-4 pods, ~2 nodes avg | ~$62/node | **$124** | VPA, consumer Kafka `[C7]` |
+
+**Subtotal Compute: ~$845/tháng**
+
+#### Database
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| RDS PostgreSQL Primary | r6g.xlarge Multi-AZ (4 vCPU, 32GB) | 1 | ~$580 | **$580** | Write path, 15GB/day `[C3]` |
+| RDS Read Replica | r6g.large (2 vCPU, 16GB) | 1 | ~$200 | **$200** | Dashboard/stats queries |
+| RDS Storage (gp3) | 500GB initial (grow ~15GB/day `[C3]`) | 1 | ~$0.116/GB | **$58** | Auto-scale, 5.48TB/yr `[C4]` |
+
+**Subtotal Database: ~$838/tháng**
+
+#### Cache
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| ElastiCache Redis (Redirect) | r6g.large (2 nodes, cluster mode) | 2 | ~$200/node | **$400** | ~40GB total `[C6]`, redirect cache |
+| ElastiCache Redis (Rate Limit) | r6g.medium (1 node + replica) | 2 | ~$100/node | **$200** | Gateway rate limiting, vài GB |
+
+**Subtotal Cache: ~$600/tháng**
+
+#### Message Queue
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| Amazon MSK | kafka.m5.large (3 brokers, Multi-AZ) | 3 | ~$165/broker | **$495** | 1.2B events/day `[C7]`, retention 7 days |
+| MSK Storage | 500GB per broker | 3 | ~$0.10/GB | **$150** | Click events + replay buffer |
+
+**Subtotal Message Queue: ~$645/tháng**
+
+#### Network / CDN
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| CloudFront | ~0.9-1.3TB origin bandwidth/day (sau cache absorb 30-50% `[C5]`) | 1 | ~$0.085/GB first 10TB | **$250** | Edge cache cho redirect 301 |
+| ALB | 1 ALB + LCU usage | 1 | ~$22 base + ~$80 LCU | **$100** | Route vào EKS |
+| NAT Gateway | 2 AZ | 2 | ~$32/gateway + data | **$120** | Outbound traffic |
+| Route53 | Hosted zone + queries | 1 | ~$0.50 + queries | **$10** | DNS |
+
+**Subtotal Network: ~$480/tháng**
+
+#### Storage
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| S3 (Data Lake) | ~7.2TB/tháng raw click events `[C7]` | 1 | ~$0.025/GB (Standard) | **$180** | 90 ngày hot, sau đó Glacier |
+| S3 (Logs/Backups) | ~500GB | 1 | ~$0.025/GB | **$13** | ELK ingest, DB backups |
+
+**Subtotal Storage: ~$193/tháng**
+
+#### Monitoring / Logging
+
+| Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú |
+|---|---|---|---|---|---|
+| CloudWatch | Metrics + logs + alarms | 1 | — | **$100** | Basic metrics + log groups |
+| Managed Prometheus + Grafana | AMP + AMG | 1 | — | **$120** | Custom metrics, dashboards |
+
+**Subtotal Monitoring: ~$220/tháng**
+
+### 17.2 Tổng hợp cost theo giai đoạn
+
+| Giai đoạn | Monthly Cost | Annual Cost | Ghi chú |
+|---|---|---|---|
+| **MVP** (10% traffic, minimal replicas) | **~$2,800** | **~$33,600** | 1 RDS r6g.large, 1 Redis node, 2 redirect pods, MSK smallest |
+| **Growth** (avg traffic — bảng 17.1) | **~$3,821** | **~$45,852** | Full setup như 17.1, avg load |
+| **Peak / Scale** (peak traffic, max HPA) | **~$6,500-8,000** | **~$78,000-96,000** | HPA max out, RDS scale-up r6g.2xlarge, thêm Redis shards, CloudFront bandwidth tăng |
+
+### 17.3 Cost Breakdown theo category
+
+| Category | USD/tháng (Growth) | % tổng cost |
+|---|---|---|
+| Compute (EKS) | $845 | 22% |
+| Database (RDS) | $838 | 22% |
+| Message Queue (MSK) | $645 | 17% |
+| Cache (ElastiCache) | $600 | 16% |
+| Network / CDN | $480 | 13% |
+| Monitoring | $220 | 6% |
+| Storage (S3) | $193 | 5% |
+| **Tổng** | **~$3,821** | **100%** |
+
+> 📌 **Database + Compute chiếm ~44% tổng cost** — đây là 2 category ưu tiên optimize đầu tiên (Reserved Instances, right-sizing).
+
+### 17.4 Cost Optimization Strategies
+
+| Strategy | Mô tả | Tiết kiệm ước tính | Trade-off |
+|---|---|---|---|
+| **Reserved Instances (1 năm)** | Commit RDS + ElastiCache (always-on workload) | ~30-40% cho DB+Cache → **~$430-575/tháng** | Lock-in 1 năm, khó đổi instance type |
+| **Savings Plans (Compute)** | Commit compute spend cho EKS nodes | ~20-30% cho compute → **~$170-250/tháng** | Lock-in 1-3 năm |
+| **Spot Instances** | Dùng cho analytics-service nodes (fault-tolerant, stateless) | ~60-70% cho analytics compute → **~$75-87/tháng** | Có thể bị interrupt, cần graceful shutdown |
+| **Right-sizing review** | Quarterly review CPU/memory utilization, downgrade over-provisioned nodes | ~10-15% tổng compute → **~$85-127/tháng** | Cần monitoring data đủ lâu |
+| **S3 Lifecycle Policies** | Click events > 90 ngày → Glacier Deep Archive ($0.002/GB) | ~90% storage cost cho cold data → **~$150/tháng** sau 6 tháng | Restore time 12-48h cho Glacier |
+| **CloudFront cache optimization** | Tăng cache hit ratio từ 30-50% lên 60-70% (tune Cache-Control headers) | Giảm origin bandwidth ~$50-100/tháng | Stale content risk nếu TTL quá dài |
+| **VPC Endpoints** | Thay NAT Gateway bằng VPC endpoints cho S3/DynamoDB/CloudWatch | Giảm NAT data processing → **~$50-80/tháng** | Cần setup endpoint policies |
+| **MSK Serverless** | Chuyển từ provisioned MSK sang serverless (nếu traffic biến động lớn) | Giảm ~30% khi off-peak → **~$100-200/tháng** | Latency có thể cao hơn khi cold start |
+| **Log sampling** | Sample debug logs 10%, giữ 100% error/warn | Giảm CloudWatch ingest → **~$30-50/tháng** | Mất một phần debug context |
+
+**Tổng tiết kiệm ước tính khi áp dụng RI + Savings Plans + Spot + S3 lifecycle: ~$900-1,100/tháng (giảm ~25-30% so với On-Demand)**
+
+### 17.5 Cost Projection (12 tháng, growth rate ~20%/quý)
+
+| Tháng | Traffic estimate | Infra changes | Monthly Cost |
+|---|---|---|---|
+| 1-3 (MVP) | 10% design load | Minimal setup | ~$2,800 |
+| 4-6 (Growth) | 30-50% design load | Full setup, HPA active | ~$3,200-3,800 |
+| 7-9 (Scale) | 70-100% design load | RDS scale-up, thêm Redis shard | ~$4,500-5,500 |
+| 10-12 (Peak) | 100-120% design load | HPA max, xem xét thêm read replica | ~$6,000-7,500 |
+| **Năm thứ 2** | Nếu traffic tiếp tục tăng 20%/quý | Cân nhắc shard DB khi > 30TB `[C4]`, thêm AZ | ~$8,000-12,000 |
+
+> 📌 **Điểm inflection quan trọng**:
+> - **Tháng 9-12**: RDS storage vượt 2TB → cần evaluate upgrade lên r6g.2xlarge (~+$400/tháng).
+> - **Năm thứ 2-3**: Data vượt 15-30TB `[C4]` → cần shard PostgreSQL hoặc migrate hot data sang dedicated cluster.
+> - **Redis**: Khi memory vượt 70% (~28GB) `[C6]` → thêm shard hoặc upgrade node type.
+
+### 17.6 Cost Alerts & Governance
+
+- **AWS Budget alerts**:
+  - **80% budget** ($3,057): warning notification → team review.
+  - **100% budget** ($3,821): alert → investigate unexpected cost increase.
+  - **120% budget** ($4,585): critical → immediate action, check for runaway resources.
+- **Review cadence**: monthly cost review (DevOps + Tech Lead), quarterly deep-dive với optimization recommendations.
+- **Tagging strategy**: tất cả resources tag theo:
+  - `team: url-shortener`
+  - `service: redirect | url | analytics | gateway`
+  - `environment: dev | staging | production`
+  - Dùng AWS Cost Explorer group by tag để phân bổ cost chính xác theo service.

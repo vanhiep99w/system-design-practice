@@ -2,7 +2,7 @@
 
 ## 📋 Tổng Quan Dự Án
 
-Đây là repository chứa các bài thực hành **System Design** cho các hệ thống thực tế. Mỗi file markdown ở **root folder** là một bài thiết kế hoàn chỉnh theo chuẩn **System Design Blueprint** gồm 16 bước.
+Đây là repository chứa các bài thực hành **System Design** cho các hệ thống thực tế. Mỗi file markdown ở **root folder** là một bài thiết kế hoàn chỉnh theo chuẩn **System Design Blueprint** gồm 17 bước.
 
 ## 🛠️ Tech Stack Ưu Tiên
 
@@ -355,6 +355,52 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 
 ### Dependencies & Blockers
 - Liệt kê external dependencies (platform team, security review, budget approval...)
+
+## 17. 💰 Cost Estimation & Optimization
+
+### 17.1 Chi phí hàng tháng theo từng resource
+- Dùng **bảng** với cấu trúc: `Resource | Spec / Sizing | Số lượng | Đơn giá (USD/tháng) | Thành tiền (USD/tháng) | Ghi chú`
+- Phân nhóm theo category: **Compute**, **Database**, **Cache**, **Message Queue**, **Network/CDN**, **Storage**, **Monitoring/Logging**, **Misc**
+- Mỗi resource phải **truy nguồn** về capacity estimation (ví dụ: Redis 40GB `[C6]`) hoặc architecture decision (ví dụ: 2 AZ cho HA)
+- Giá tham chiếu theo **AWS On-Demand** ở region `ap-southeast-1` (hoặc region phù hợp), ghi rõ region
+
+### 17.2 Tổng hợp cost theo giai đoạn
+- Dùng **bảng** `Giai đoạn | Monthly Cost | Annual Cost | Ghi chú`
+- Ít nhất 3 giai đoạn: **MVP** (traffic thấp), **Growth** (avg traffic), **Peak/Scale** (peak traffic)
+- Mỗi giai đoạn ghi rõ assumptions (traffic level, số replicas, instance size)
+
+### 17.3 Cost Breakdown theo category
+- Dùng **bảng hoặc danh sách** tỷ lệ phần trăm: `Category | % tổng cost`
+- Giúp identify category nào chiếm chi phí lớn nhất → ưu tiên optimize
+
+### 17.4 Cost Optimization Strategies
+Liệt kê các chiến lược giảm chi phí, mỗi strategy cần:
+- **Mô tả**: làm gì
+- **Tiết kiệm ước tính**: bao nhiêu % hoặc USD/tháng
+- **Trade-off**: đánh đổi gì (nếu có)
+
+Các hướng optimize điển hình:
+- **Reserved Instances / Savings Plans**: commit 1-3 năm cho compute/DB ổn định → giảm 30-60%
+- **Spot Instances**: cho workload stateless, fault-tolerant (batch analytics, CI/CD workers)
+- **Right-sizing**: review instance utilization, downgrade over-provisioned resources
+- **Auto-scaling tối ưu**: scale-to-zero cho non-critical services ngoài giờ cao điểm
+- **Storage tiering**: S3 Intelligent-Tiering, Glacier cho cold data, lifecycle policies
+- **Cache hit ratio improvement**: tăng cache hit → giảm DB read → có thể dùng DB instance nhỏ hơn
+- **Data transfer optimization**: giữ traffic trong cùng AZ khi có thể, dùng VPC endpoints thay NAT Gateway
+- **CDN optimization**: cache nhiều hơn ở edge → giảm origin bandwidth cost
+- **Logging/Monitoring cost**: sampling strategy, log retention policy, giảm high-cardinality metrics
+
+### 17.5 Cost Projection (12-24 tháng)
+- Dự báo cost theo growth rate (ví dụ: traffic tăng 20%/quý)
+- Ghi rõ điểm inflection (ví dụ: khi nào cần upgrade DB instance, thêm shard, thêm AZ)
+- Bảng projection: `Tháng | Traffic estimate | Infra changes | Monthly Cost`
+
+### 17.6 Cost Alerts & Governance
+- Đặt **AWS Budget alerts** theo ngưỡng (ví dụ: 80%, 100%, 120% budget)
+- Quy trình review cost: tần suất (monthly/quarterly), người chịu trách nhiệm
+- Tagging strategy: tag resources theo team/service/environment để phân bổ cost chính xác
+
+> 📌 **Nguyên tắc**: Mỗi con số cost phải **truy nguồn** về sizing decision ở §2.3 (Capacity Estimation) hoặc §10 (Architecture). Không đưa con số cost không có cơ sở.
 ```
 
 ## 📝 Quy Tắc Viết Nội Dung
@@ -387,7 +433,7 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 
 1. Tạo file mới ở **root folder** với tên dạng `kebab-case.md`
 2. Copy template từ trên vào file mới
-3. Điền nội dung chi tiết cho từng section theo thứ tự 1 → 16
+3. Điền nội dung chi tiết cho từng section theo thứ tự 1 → 17
 4. Đảm bảo tất cả diagrams render đúng (Mermaid syntax)
 5. Đảm bảo diagrams dùng **Mermaid** hoặc **ASCII art** (không dùng file ảnh ngoài)
 6. Cập nhật bảng danh sách bài trong `README.md`
@@ -395,7 +441,7 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 
 ## ⚠️ Lưu Ý Quan Trọng
 
-- **KHÔNG** bỏ qua bất kỳ section nào trong template 16 bước
+- **KHÔNG** bỏ qua bất kỳ section nào trong template 17 bước
 - **KHÔNG** viết nội dung quá chung chung — phải cụ thể cho hệ thống đang thiết kế
 - **LUÔN** bao gồm capacity estimation với con số thực tế
 - **LUÔN** giải thích **tại sao** chọn giải pháp đó, không chỉ liệt kê

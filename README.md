@@ -10,33 +10,33 @@ Repository này chứa các bài thực hành thiết kế hệ thống (System 
 
 ### 🟢 Cơ bản (Basic)
 
-| # | Bài toán | File | Độ khó |
-|---|---------|------|--------|
-| 1 | URL Shortener (TinyURL) | [url-shortener.md](./url-shortener.md) | ⭐⭐ |
-| 2 | Paste Bin | [paste-bin.md](./paste-bin.md) | ⭐⭐ |
-| 3 | Rate Limiter | [rate-limiter.md](./rate-limiter.md) | ⭐⭐ |
+| # | Bài toán | File | Độ khó | Trạng thái |
+|---|---------|------|--------|------------|
+| 1 | URL Shortener (TinyURL) | [url-shortener.md](./url-shortener.md) | ⭐⭐ | ✅ Done |
+| 2 | Paste Bin | [paste-bin.md](./paste-bin.md) | ⭐⭐ | ✅ Done |
+| 3 | Rate Limiter | [rate-limiter.md](./rate-limiter.md) | ⭐⭐ | ✅ Done |
 
 ### 🟡 Trung bình (Intermediate)
 
-| # | Bài toán | File | Độ khó |
-|---|---------|------|--------|
-| 4 | Chat System (WhatsApp/Messenger) | [chat-system.md](./chat-system.md) | ⭐⭐⭐ |
-| 5 | News Feed (Facebook/Twitter) | [news-feed.md](./news-feed.md) | ⭐⭐⭐ |
-| 6 | Notification System | [notification-system.md](./notification-system.md) | ⭐⭐⭐ |
-| 7 | Search Autocomplete | [search-autocomplete.md](./search-autocomplete.md) | ⭐⭐⭐ |
-| 8 | Web Crawler | [web-crawler.md](./web-crawler.md) | ⭐⭐⭐ |
+| # | Bài toán | File | Độ khó | Trạng thái |
+|---|---------|------|--------|------------|
+| 4 | Chat System (WhatsApp/Messenger) | [chat-system.md](./chat-system.md) | ⭐⭐⭐ | ✅ Done |
+| 5 | News Feed (Facebook/Twitter) | [news-feed.md](./news-feed.md) | ⭐⭐⭐ | ✅ Done |
+| 6 | Notification System | [notification-system.md](./notification-system.md) | ⭐⭐⭐ | ⬜ Todo |
+| 7 | Search Autocomplete | [search-autocomplete.md](./search-autocomplete.md) | ⭐⭐⭐ | ⬜ Todo |
+| 8 | Web Crawler | [web-crawler.md](./web-crawler.md) | ⭐⭐⭐ | ⬜ Todo |
 
 ### 🔴 Nâng cao (Advanced)
 
-| # | Bài toán | File | Độ khó |
-|---|---------|------|--------|
-| 9 | Video Streaming (YouTube/Netflix) | [video-streaming.md](./video-streaming.md) | ⭐⭐⭐⭐ |
-| 10 | Distributed Cache (Redis) | [distributed-cache.md](./distributed-cache.md) | ⭐⭐⭐⭐ |
-| 11 | E-Commerce Platform (Shopee/Amazon) | [e-commerce.md](./e-commerce.md) | ⭐⭐⭐⭐ |
-| 12 | Ride Sharing (Grab/Uber) | [ride-sharing.md](./ride-sharing.md) | ⭐⭐⭐⭐ |
-| 13 | Distributed Message Queue (Kafka) | [message-queue.md](./message-queue.md) | ⭐⭐⭐⭐⭐ |
-| 14 | Google Maps | [google-maps.md](./google-maps.md) | ⭐⭐⭐⭐⭐ |
-| 15 | Payment System (VNPay/Stripe) | [payment-system.md](./payment-system.md) | ⭐⭐⭐⭐⭐ |
+| # | Bài toán | File | Độ khó | Trạng thái |
+|---|---------|------|--------|------------|
+| 9 | Video Streaming (YouTube/Netflix) | [video-streaming.md](./video-streaming.md) | ⭐⭐⭐⭐ | ⬜ Todo |
+| 10 | Distributed Cache (Redis) | [distributed-cache.md](./distributed-cache.md) | ⭐⭐⭐⭐ | ⬜ Todo |
+| 11 | E-Commerce Platform (Shopee/Amazon) | [e-commerce.md](./e-commerce.md) | ⭐⭐⭐⭐ | ⬜ Todo |
+| 12 | Ride Sharing (Grab/Uber) | [ride-sharing.md](./ride-sharing.md) | ⭐⭐⭐⭐ | ⬜ Todo |
+| 13 | Distributed Message Queue (Kafka) | [message-queue.md](./message-queue.md) | ⭐⭐⭐⭐⭐ | ⬜ Todo |
+| 14 | Google Maps | [google-maps.md](./google-maps.md) | ⭐⭐⭐⭐⭐ | ⬜ Todo |
+| 15 | Payment System (VNPay/Stripe) | [payment-system.md](./payment-system.md) | ⭐⭐⭐⭐⭐ | ⬜ Todo |
 
 ## 🎯 Mục Tiêu
 
