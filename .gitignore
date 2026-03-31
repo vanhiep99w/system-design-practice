@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+dist/
+
+# Fumadocs generated
+.source/
+content/
+
+# Wrangler
+.wrangler/
+
+# Misc
+.DS_Store
+*.local
