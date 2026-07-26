@@ -8,6 +8,16 @@
   --fd-layout-width: 100vw;
 }
 
+/* Remove only the outer gutters; preserve explicit space for both sidebars. */
+#nd-docs-layout {
+  grid-template-columns:
+    0
+    var(--fd-sidebar-col)
+    minmax(0, calc(100% - var(--fd-sidebar-col) - var(--fd-toc-width)))
+    var(--fd-toc-width)
+    0 !important;
+}
+
 /* Keep all three columns close to their adjacent edges. */
 #nd-sidebar > div {
   padding-inline: 0.75rem;
