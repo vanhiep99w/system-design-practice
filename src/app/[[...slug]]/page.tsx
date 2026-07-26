@@ -24,7 +24,7 @@ export default async function Page({
 
   const MDX = page.data.body;
   return (
-    <DocsPage toc={page.data.toc} full={false}>
+    <DocsPage toc={page.data.toc} full>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>

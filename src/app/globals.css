@@ -4,11 +4,29 @@
 :root {
   --fd-font: 'Inter', system-ui, sans-serif;
   --fd-font-mono: 'JetBrains Mono', monospace;
+  /* Use the full viewport instead of leaving gutters outside both sidebars. */
+  --fd-layout-width: 100vw;
 }
 
-/* Wider content area */
-#nd-page article {
+/* Keep all three columns close to their adjacent edges. */
+#nd-sidebar > div {
+  padding-inline: 0.75rem;
+}
+
+#nd-page {
   max-width: none;
+  margin-inline: 0;
+  padding-inline: 0.75rem;
+}
+
+#nd-toc {
+  padding-inline-end: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  #nd-page {
+    padding-inline: 1rem;
+  }
 }
 
 /* Vietnamese text readability */
