@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="System Design">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#14212B"/>
+
+  <!-- Connections: gateway → services → database -->
+  <path
+    d="M17 32H22M22 32L28 20M22 32L28 44M40 20L47 27M40 44L47 37"
+    fill="none"
+    stroke="#F2EDE1"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Gateway -->
+  <path d="M8 32L13 27L18 32L13 37Z" fill="#F4B942"/>
+
+  <!-- Service nodes -->
+  <rect x="27" y="14" width="14" height="12" rx="3" fill="#F2EDE1"/>
+  <rect x="27" y="38" width="14" height="12" rx="3" fill="#F2EDE1"/>
+  <path d="M31 19H37M31 43H37" stroke="#14212B" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Database -->
+  <path
+    d="M46 27C46 24.8 48.7 23 52 23C55.3 23 58 24.8 58 27V37C58 39.2 55.3 41 52 41C48.7 41 46 39.2 46 37V27Z"
+    fill="#F4B942"
+  />
+  <ellipse cx="52" cy="27" rx="6" ry="4" fill="#FFD36A"/>
+  <path d="M46 32C46 34.2 48.7 36 52 36C55.3 36 58 34.2 58 32" fill="none" stroke="#14212B" stroke-width="2"/>
+</svg>
