@@ -333,128 +333,164 @@ Async.ANALYTICS -> Data.DB
   - Server lưu idempotency key trong Redis (TTL 24h), trả về kết quả cũ nếu key đã tồn tại.
 
 ## 6. 🔄 System / App Flow
+Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là response/event như nhãn mô tả. Trong group `alt`, chỉ một nhánh được chọn; `loop` là phần lặp lại. Group `par` biểu diễn các nhánh song song, không phải thứ tự thực thi từ trên xuống.
+
 
 ### Flow 1: Create Paste
 
-```mermaid
-sequenceDiagram
-    actor U as User
-    participant GW as API Gateway
-    participant PS as Paste Service
-    participant IDG as ID Generator
-    participant S3 as S3
-    participant DB as PostgreSQL
-    participant CACHE as Redis
-    participant K as Kafka
+Luồng dưới đây đi từ trên xuống; mũi tên nét đứt là response. Publish `PasteCreatedEvent` là async, không chờ consumer xử lý trước khi trả `201 Created`.
 
-    U->>GW: POST /api/v1/pastes {content, language, visibility, expireIn}
-    GW->>GW: Validate JWT (if present), rate limit check
-    GW->>PS: Forward request
+```d2 interactive title="Create Paste — lưu content và metadata"
+shape: sequence_diagram
+U: "User"
+GW: "API Gateway"
+PS: "Paste Service"
+IDG: "ID Generator"
+S3: "S3" {
+  icon: ./diagrams/icons/s3.svg
+}
+DB: "PostgreSQL" {
+  icon: ./diagrams/icons/postgres.svg
+}
+CACHE: "Redis" {
+  icon: ./diagrams/icons/redis.svg
+}
+K: "Kafka"
 
-    PS->>PS: Validate input (size, content type)
-    PS->>IDG: Generate Snowflake ID
-    IDG-->>PS: snowflake_id
+U -> GW: "POST /api/v1/pastes {content, language, visibility, expireIn}"
+GW -> GW: "Validate JWT (if present), rate limit check"
+GW -> PS: "Forward request"
 
-    PS->>PS: Base62 encode → short_code
-    PS->>PS: gzip compress content
+PS -> PS: "Validate input (size, content type)"
+PS -> IDG: "Generate Snowflake ID"
+IDG -> PS: "snowflake_id" {style.stroke-dash: 4}
 
-    PS->>S3: PUT pastes/{short_code} (compressed content)
-    S3-->>PS: 200 OK
+PS -> PS: "Base62 encode → short_code"
+PS -> PS: "gzip compress content"
 
-    PS->>DB: INSERT paste_metadata (short_code, language, visibility, expire_at, s3_key, user_id)
-    DB-->>PS: Created
+PS -> S3: "PUT pastes/{short_code} (compressed content)"
+S3 -> PS: "200 OK" {style.stroke-dash: 4}
 
-    PS->>CACHE: SET paste:{short_code} (metadata + content, TTL=1h)
-    CACHE-->>PS: OK
+PS -> DB: "INSERT paste_metadata (short_code, language, visibility, expire_at, s3_key, user_id)"
+DB -> PS: "Created" {style.stroke-dash: 4}
 
-    PS->>K: Publish PasteCreatedEvent (async)
+PS -> CACHE: "SET paste:{short_code} (metadata + content, TTL=1h)"
+CACHE -> PS: "OK" {style.stroke-dash: 4}
 
-    PS-->>GW: 201 Created {shortCode, pasteUrl, rawUrl, expireAt}
-    GW-->>U: 201 Created
+PS -> K: "Publish PasteCreatedEvent (async)"
+
+PS -> GW: "201 Created {shortCode, pasteUrl, rawUrl, expireAt}" {style.stroke-dash: 4}
+GW -> U: "201 Created" {style.stroke-dash: 4}
 ```
 
 ### Flow 2: Read Paste
 
-```mermaid
-sequenceDiagram
-    actor U as User
-    participant CDN as CloudFront
-    participant GW as API Gateway
-    participant RS as Read Service
-    participant CACHE as Redis
-    participant DB as PostgreSQL
-    participant S3 as S3
-    participant K as Kafka
+```d2 interactive title="paste-bin — Flow 2: Read Paste"
+shape: sequence_diagram
+U: "User"
+CDN: "CloudFront" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+GW: "API Gateway"
+RS: "Read Service"
+CACHE: "Redis" {
+  icon: ./diagrams/icons/redis.svg
+}
+DB: "PostgreSQL" {
+  icon: ./diagrams/icons/postgres.svg
+}
+S3: "S3" {
+  icon: ./diagrams/icons/s3.svg
+}
+K: "Kafka"
 
-    U->>CDN: GET /p/{shortCode}
-    CDN->>CDN: Check cache
+U -> CDN: "GET /p/{shortCode}"
+CDN -> CDN: "Check cache"
 
-    alt CDN cache hit
-        CDN-->>U: 200 OK (cached HTML)
-    else CDN cache miss
-        CDN->>GW: Forward request
-        GW->>RS: GET /p/{shortCode}
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: CDN cache hit" {
+    CDN -> U: "200 OK (cached HTML)" {style.stroke-dash: 4}
+  }
+  group_3: "else: CDN cache miss" {
+    CDN -> GW: "Forward request"
+    GW -> RS: "GET /p/{shortCode}"
 
-        RS->>CACHE: GET paste:{shortCode}
-        alt Cache hit
-            CACHE-->>RS: metadata + content
-        else Cache miss
-            RS->>DB: SELECT * FROM paste_metadata WHERE short_code = ?
-            DB-->>RS: metadata
+    RS -> CACHE: "GET paste:{shortCode}"
+    group_4: "alt — chỉ chọn một nhánh" {
+      group_5: "if: Cache hit" {
+        CACHE -> RS: "metadata + content" {style.stroke-dash: 4}
+      }
+      group_6: "else: Cache miss" {
+        RS -> DB: "SELECT * FROM paste_metadata WHERE short_code = ?"
+        DB -> RS: "metadata" {style.stroke-dash: 4}
 
-            alt Paste not found
-                RS-->>GW: 404 Not Found
-                GW-->>CDN: 404
-                CDN-->>U: 404 Not Found
-            else Paste expired
-                RS-->>GW: 410 Gone
-                GW-->>CDN: 410
-                CDN-->>U: 410 Gone
-            else Paste found
-                RS->>RS: Check visibility (private → require auth)
-                RS->>S3: GET pastes/{short_code}
-                S3-->>RS: compressed content
-                RS->>RS: gunzip decompress
-                RS->>CACHE: SET paste:{shortCode} (TTL=1h)
-            end
-        end
+        group_7: "alt — chỉ chọn một nhánh" {
+          group_8: "if: Paste not found" {
+            RS -> GW: "404 Not Found" {style.stroke-dash: 4}
+            GW -> CDN: "404" {style.stroke-dash: 4}
+            CDN -> U: "404 Not Found" {style.stroke-dash: 4}
+          }
+          group_9: "else: Paste expired" {
+            RS -> GW: "410 Gone" {style.stroke-dash: 4}
+            GW -> CDN: "410" {style.stroke-dash: 4}
+            CDN -> U: "410 Gone" {style.stroke-dash: 4}
+          }
+          group_10: "else: Paste found" {
+            RS -> RS: "Check visibility (private → require auth)"
+            RS -> S3: "GET pastes/{short_code}"
+            S3 -> RS: "compressed content" {style.stroke-dash: 4}
+            RS -> RS: "gunzip decompress"
+            RS -> CACHE: "SET paste:{shortCode} (TTL=1h)"
+          }
+        }
+      }
+    }
 
-        RS->>K: Publish ViewEvent (async, fire-and-forget)
-        RS-->>GW: 200 OK {metadata, content, language}
-        GW-->>CDN: 200 OK
-        CDN->>CDN: Cache response (TTL=5min for unlisted)
-        CDN-->>U: 200 OK
-    end
+    RS -> K: "Publish ViewEvent (async, fire-and-forget)"
+    RS -> GW: "200 OK {metadata, content, language}" {style.stroke-dash: 4}
+    GW -> CDN: "200 OK" {style.stroke-dash: 4}
+    CDN -> CDN: "Cache response (TTL=5min for unlisted)"
+    CDN -> U: "200 OK" {style.stroke-dash: 4}
+  }
+}
 ```
 
 ### Flow 3: Burn After Read
 
-```mermaid
-sequenceDiagram
-    actor U as User
-    participant GW as API Gateway
-    participant RS as Read Service
-    participant DB as PostgreSQL
-    participant S3 as S3
-    participant CACHE as Redis
+Read Service lấy content, đánh dấu paste đã burned rồi xóa object và cache trước khi trả response. Lần đọc tiếp theo nhận `410 Gone`.
 
-    U->>GW: GET /p/{shortCode}
-    GW->>RS: Forward
+```d2 interactive title="Burn After Read — đọc một lần rồi xóa"
+shape: sequence_diagram
+U: "User"
+GW: "API Gateway"
+RS: "Read Service"
+DB: "PostgreSQL" {
+  icon: ./diagrams/icons/postgres.svg
+}
+S3: "S3" {
+  icon: ./diagrams/icons/s3.svg
+}
+CACHE: "Redis" {
+  icon: ./diagrams/icons/redis.svg
+}
 
-    RS->>DB: SELECT * FROM paste_metadata WHERE short_code = ? FOR UPDATE
-    DB-->>RS: metadata (burn_after_read = true, read_count = 0)
+U -> GW: "GET /p/{shortCode}"
+GW -> RS: "Forward"
 
-    RS->>S3: GET pastes/{short_code}
-    S3-->>RS: content
+RS -> DB: "SELECT * FROM paste_metadata WHERE short_code = ? FOR UPDATE"
+DB -> RS: "metadata (burn_after_read = true, read_count = 0)" {style.stroke-dash: 4}
 
-    RS->>DB: UPDATE paste_metadata SET status = 'BURNED', read_count = 1
-    RS->>S3: DELETE pastes/{short_code}
-    RS->>CACHE: DEL paste:{shortCode}
+RS -> S3: "GET pastes/{short_code}"
+S3 -> RS: "content" {style.stroke-dash: 4}
 
-    RS-->>GW: 200 OK {content, burned: true}
-    GW-->>U: 200 OK (lần truy cập duy nhất)
+RS -> DB: "UPDATE paste_metadata SET status = 'BURNED', read_count = 1"
+RS -> S3: "DELETE pastes/{short_code}"
+RS -> CACHE: "DEL paste:{shortCode}"
 
-    Note over U,CACHE: Lần truy cập sau → 410 Gone
+RS -> GW: "200 OK {content, burned: true}" {style.stroke-dash: 4}
+GW -> U: "200 OK (lần truy cập duy nhất)" {style.stroke-dash: 4}
+
+U."Lần truy cập sau → 410 Gone"
 ```
 
 ### Error handling & Edge cases

@@ -571,57 +571,75 @@ OBS -> REDIRSVC: "monitor" {style.stroke-dash: 4}
   - Hỗ trợ `Idempotency-Key` cho `POST /api/v1/urls` để tránh tạo trùng khi retry.
 
 ## 6. 🔄 System / App Flow
-### Flow 1: Tạo short URL
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant G as API Gateway
-    participant U as URL Service
-    participant I as ID Service
-    participant P as PostgreSQL
-    participant R as Redis
+Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là response/event như nhãn mô tả. Trong group `alt`, chỉ một nhánh được chọn; `loop` là phần lặp lại. Group `par` biểu diễn các nhánh song song, không phải thứ tự thực thi từ trên xuống.
 
-    C->>G: POST /api/v1/urls { longUrl, customAlias? }
-    G->>U: Forward request + JWT claims
-    U->>U: Validate URL + policy
-    alt custom alias provided
-        U->>P: Check alias uniqueness
-        P-->>U: available / conflict
-    else auto generated
-        U->>I: nextId()
-        I-->>U: 64-bit id
-        U->>U: Base62 encode -> shortCode
-    end
-    U->>P: Insert short_url record
-    U->>R: Cache shortCode -> longUrl (TTL optional)
-    U-->>G: 201 Created + shortUrl
-    G-->>C: Response
+### Flow 1: Tạo short URL
+```d2 interactive title="url-shortener — Flow 1: Tạo short URL"
+shape: sequence_diagram
+C: "Client"
+G: "API Gateway"
+U: "URL Service"
+I: "ID Service"
+P: "PostgreSQL" {
+  icon: ./diagrams/icons/postgres.svg
+}
+R: "Redis" {
+  icon: ./diagrams/icons/redis.svg
+}
+
+C -> G: "POST /api/v1/urls { longUrl, customAlias? }"
+G -> U: "Forward request + JWT claims"
+U -> U: "Validate URL + policy"
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: custom alias provided" {
+    U -> P: "Check alias uniqueness"
+    P -> U: "available / conflict" {style.stroke-dash: 4}
+  }
+  group_3: "else: auto generated" {
+    U -> I: "nextId()"
+    I -> U: "64-bit id" {style.stroke-dash: 4}
+    U -> U: "Base62 encode -> shortCode"
+  }
+}
+U -> P: "Insert short_url record"
+U -> R: "Cache shortCode -> longUrl (TTL optional)"
+U -> G: "201 Created + shortUrl" {style.stroke-dash: 4}
+G -> C: "Response" {style.stroke-dash: 4}
 ```
 
 ### Flow 2: Redirect short URL
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant E as Edge (CloudFront)
-    participant G as Gateway
-    participant R as Redis
-    participant S as Redirect Service
-    participant P as PostgreSQL
-    participant K as Kafka
+```d2 interactive title="url-shortener — Flow 2: Redirect short URL"
+shape: sequence_diagram
+B: "Browser"
+E: "Edge (CloudFront)" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+G: "Gateway"
+R: "Redis" {
+  icon: ./diagrams/icons/redis.svg
+}
+S: "Redirect Service"
+P: "PostgreSQL" {
+  icon: ./diagrams/icons/postgres.svg
+}
+K: "Kafka"
 
-    B->>E: GET /abc123x
-    E->>G: Cache miss (or bypass)
-    G->>S: Resolve shortCode
-    S->>R: GET abc123x
-    alt Cache hit
-        R-->>S: longUrl
-    else Cache miss
-        S->>P: SELECT long_url, expires_at, status
-        P-->>S: row data
-        S->>R: SET abc123x -> longUrl
-    end
-    S->>K: Publish click event async
-    S-->>B: 301 Location: https://target-url
+B -> E: "GET /abc123x"
+E -> G: "Cache miss (or bypass)"
+G -> S: "Resolve shortCode"
+S -> R: "GET abc123x"
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Cache hit" {
+    R -> S: "longUrl" {style.stroke-dash: 4}
+  }
+  group_3: "else: Cache miss" {
+    S -> P: "SELECT long_url, expires_at, status"
+    P -> S: "row data" {style.stroke-dash: 4}
+    S -> R: "SET abc123x -> longUrl"
+  }
+}
+S -> K: "Publish click event async"
+S -> B: "301 Location: https://target-url" {style.stroke-dash: 4}
 ```
 
 ### Error handling & Edge cases

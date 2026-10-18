@@ -450,121 +450,144 @@ Application.FeedSvc -> Observability.Jaeger {style.stroke-dash: 4}
 - **Response Compression**: gzip/brotli cho JSON responses > 1KB, giảm bandwidth `[C7]`
 
 ## 6. 🔄 System / App Flow
+Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là response/event như nhãn mô tả. Trong group `alt`, chỉ một nhánh được chọn; `loop` là phần lặp lại. Group `par` biểu diễn các nhánh song song, không phải thứ tự thực thi từ trên xuống.
+
 
 ### Flow 1: Create Post
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant Client as React Client
-    participant GW as API Gateway
-    participant PS as Post Service
-    participant DB as PostgreSQL
-    participant K as Kafka
-    participant FS as Fan-out Service
-    participant R as Redis Cache
-    participant NS as Notification Svc
-    participant S3 as S3 (Media)
+```d2 interactive title="news-feed — Flow 1: Create Post"
+shape: sequence_diagram
+User: "User"
+Client: "React Client"
+GW: "API Gateway"
+PS: "Post Service"
+DB: "PostgreSQL" {
+  icon: ./diagrams/icons/postgres.svg
+}
+K: "Kafka"
+FS: "Fan-out Service"
+R: "Redis Cache" {
+  icon: ./diagrams/icons/redis.svg
+}
+NS: "Notification Svc"
+S3: "S3 (Media)" {
+  icon: ./diagrams/icons/s3.svg
+}
 
-    User->>Client: Tạo post (text + ảnh)
+User -> Client: "Tạo post (text + ảnh)"
 
-    alt Post có media
-        Client->>GW: POST /api/v1/media/presign
-        GW->>Client: {uploadUrl, mediaKey}
-        Client->>S3: PUT (presigned URL) — upload ảnh
-        S3-->>Client: 200 OK
-    end
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Post có media" {
+    Client -> GW: "POST /api/v1/media/presign"
+    GW -> Client: "{uploadUrl, mediaKey}"
+    Client -> S3: "PUT (presigned URL) — upload ảnh"
+    S3 -> Client: "200 OK" {style.stroke-dash: 4}
+  }
+}
 
-    Client->>GW: POST /api/v1/posts {content, mediaKeys[], idempotencyKey}
-    GW->>GW: Validate JWT, Rate limit check
-    GW->>PS: Forward request
+Client -> GW: "POST /api/v1/posts {content, mediaKeys[], idempotencyKey}"
+GW -> GW: "Validate JWT, Rate limit check"
+GW -> PS: "Forward request"
 
-    PS->>PS: Validate content (length, banned words)
-    PS->>PS: Generate Snowflake ID
-    PS->>DB: INSERT INTO posts (...)
-    DB-->>PS: OK
+PS -> PS: "Validate content (length, banned words)"
+PS -> PS: "Generate Snowflake ID"
+PS -> DB: "INSERT INTO posts (...)"
+DB -> PS: "OK" {style.stroke-dash: 4}
 
-    PS->>R: SET post:{postId} (cache post details, TTL=24h)
-    PS->>K: Publish "post-created" event {postId, userId, createdAt}
-    PS-->>GW: 201 Created {post}
-    GW-->>Client: 201 Created {post}
+PS -> R: "SET post:{postId} (cache post details, TTL=24h)"
+PS -> K: "Publish \"post-created\" event {postId, userId, createdAt}"
+PS -> GW: "201 Created {post}" {style.stroke-dash: 4}
+GW -> Client: "201 Created {post}" {style.stroke-dash: 4}
 
-    Note over K,FS: Async processing
+K."[K,FS] Async processing"
 
-    K->>FS: Consume "post-created"
-    FS->>FS: Check: userId is celebrity? (Redis SET lookup)
+K -> FS: "Consume \"post-created\""
+FS -> FS: "Check: userId is celebrity? (Redis SET lookup)"
 
-    alt Normal User (< 10K followers)
-        FS->>FS: Get follower list (from Social Graph cache)
-        FS->>R: Pipeline ZADD feed:{followerId} for each follower
-        R-->>FS: OK
-    else Celebrity User (≥ 10K followers)
-        FS->>R: ZADD celebrity_posts:{userId} {postId, timestamp}
-        R-->>FS: OK
-    end
+group_3: "alt — chỉ chọn một nhánh" {
+  group_4: "if: Normal User (< 10K followers)" {
+    FS -> FS: "Get follower list (from Social Graph cache)"
+    FS -> R: "Pipeline ZADD feed:{followerId} for each follower"
+    R -> FS: "OK" {style.stroke-dash: 4}
+  }
+  group_5: "else: Celebrity User (≥ 10K followers)" {
+    FS -> R: "ZADD celebrity_posts:{userId} {postId, timestamp}"
+    R -> FS: "OK" {style.stroke-dash: 4}
+  }
+}
 
-    K->>NS: Consume "post-created"
-    NS->>NS: Get online followers via WebSocket registry
-    NS->>Client: Push "new post" notification (WebSocket)
+K -> NS: "Consume \"post-created\""
+NS -> NS: "Get online followers via WebSocket registry"
+NS -> Client: "Push \"new post\" notification (WebSocket)"
 ```
 
 ### Flow 2: Fetch News Feed
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant Client as React Client
-    participant GW as API Gateway
-    participant FS as Feed Service
-    participant RS as Ranking Service
-    participant R as Redis Cache
-    participant DB as PostgreSQL (Replica)
+```d2 interactive title="news-feed — Flow 2: Fetch News Feed"
+shape: sequence_diagram
+User: "User"
+Client: "React Client"
+GW: "API Gateway"
+FS: "Feed Service"
+RS: "Ranking Service"
+R: "Redis Cache" {
+  icon: ./diagrams/icons/redis.svg
+}
+DB: "PostgreSQL (Replica)" {
+  icon: ./diagrams/icons/postgres.svg
+}
 
-    User->>Client: Mở app / Scroll feed
-    Client->>GW: GET /api/v1/feed?cursor=xxx&limit=20
-    GW->>GW: Validate JWT, Rate limit
-    GW->>FS: Forward request
+User -> Client: "Mở app / Scroll feed"
+Client -> GW: "GET /api/v1/feed?cursor=xxx&limit=20"
+GW -> GW: "Validate JWT, Rate limit"
+GW -> FS: "Forward request"
 
-    FS->>R: ZREVRANGEBYSCORE feed:{userId} (get post IDs, cursor-based)
+FS -> R: "ZREVRANGEBYSCORE feed:{userId} (get post IDs, cursor-based)"
 
-    alt Cache HIT
-        R-->>FS: List of post IDs (pre-computed feed)
-    else Cache MISS
-        R-->>FS: Empty / partial
-        FS->>DB: Query posts from followed users (fallback)
-        DB-->>FS: Post IDs
-        FS->>R: Rebuild feed cache (ZADD batch)
-    end
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Cache HIT" {
+    R -> FS: "List of post IDs (pre-computed feed)" {style.stroke-dash: 4}
+  }
+  group_3: "else: Cache MISS" {
+    R -> FS: "Empty / partial" {style.stroke-dash: 4}
+    FS -> DB: "Query posts from followed users (fallback)"
+    DB -> FS: "Post IDs" {style.stroke-dash: 4}
+    FS -> R: "Rebuild feed cache (ZADD batch)"
+  }
+}
 
-    Note over FS: Merge celebrity posts
+FS."Merge celebrity posts"
 
-    FS->>R: Get celebrity list user follows (SET members)
-    R-->>FS: [celebrity_1, celebrity_2, ...]
+FS -> R: "Get celebrity list user follows (SET members)"
+R -> FS: "[celebrity_1, celebrity_2, ...]" {style.stroke-dash: 4}
 
-    loop Each celebrity
-        FS->>R: ZREVRANGEBYSCORE celebrity_posts:{celebId} (recent posts)
-        R-->>FS: Celebrity post IDs
-    end
+group_4: "loop — lặp lại cho Each celebrity" {
+  FS -> R: "ZREVRANGEBYSCORE celebrity_posts:{celebId} (recent posts)"
+  R -> FS: "Celebrity post IDs" {style.stroke-dash: 4}
+}
 
-    FS->>FS: Merge normal feed + celebrity posts (dedup)
+FS -> FS: "Merge normal feed + celebrity posts (dedup)"
 
-    FS->>R: MGET post:{id} for all post IDs (batch fetch post details)
+FS -> R: "MGET post:{id} for all post IDs (batch fetch post details)"
 
-    alt All posts in cache
-        R-->>FS: Post details
-    else Some cache miss
-        R-->>FS: Partial results
-        FS->>DB: SELECT * FROM posts WHERE id IN (missing IDs)
-        DB-->>FS: Missing post details
-        FS->>R: Cache fetched posts (SET post:{id}, TTL=24h)
-    end
+group_5: "alt — chỉ chọn một nhánh" {
+  group_6: "if: All posts in cache" {
+    R -> FS: "Post details" {style.stroke-dash: 4}
+  }
+  group_7: "else: Some cache miss" {
+    R -> FS: "Partial results" {style.stroke-dash: 4}
+    FS -> DB: "SELECT * FROM posts WHERE id IN (missing IDs)"
+    DB -> FS: "Missing post details" {style.stroke-dash: 4}
+    FS -> R: "Cache fetched posts (SET post:{id}, TTL=24h)"
+  }
+}
 
-    FS->>RS: Rank posts (recency, engagement, affinity)
-    RS-->>FS: Sorted post list with scores
+FS -> RS: "Rank posts (recency, engagement, affinity)"
+RS -> FS: "Sorted post list with scores" {style.stroke-dash: 4}
 
-    FS-->>GW: 200 OK {posts[], nextCursor}
-    GW-->>Client: 200 OK {posts[], nextCursor}
-    Client->>Client: Render feed, setup infinite scroll
+FS -> GW: "200 OK {posts[], nextCursor}" {style.stroke-dash: 4}
+GW -> Client: "200 OK {posts[], nextCursor}" {style.stroke-dash: 4}
+Client -> Client: "Render feed, setup infinite scroll"
 ```
 
 ### Error Handling & Edge Cases

@@ -491,68 +491,80 @@ Observability.PROM -> Observability.GRAFANA {style.stroke-dash: 4}
   > 📌 Rule Management API bản thân cũng cần rate limit để tránh admin script chạy sai gây overload DB/Kafka. Limits này enforce tại API Gateway layer, dùng chính rate-limit-library.
 
 ## 6. 🔄 System / App Flow
+Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là response/event như nhãn mô tả. Trong group `alt`, chỉ một nhánh được chọn; `loop` là phần lặp lại. Group `par` biểu diễn các nhánh song song, không phải thứ tự thực thi từ trên xuống.
+
 
 ### Flow 1: Rate Limit Check (Critical Path)
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant GW as API Gateway
-    participant RL as Rate Limit Library
-    participant R as Redis
-    participant K as Kafka
-    participant SVC as Backend Service
+```d2 interactive title="rate-limiter — Flow 1: Rate Limit Check (Critical Path)"
+shape: sequence_diagram
+C: "Client"
+GW: "API Gateway"
+RL: "Rate Limit Library"
+R: "Redis" {
+  icon: ./diagrams/icons/redis.svg
+}
+K: "Kafka"
+SVC: "Backend Service"
 
-    C->>GW: GET /api/v1/products
-    GW->>RL: check(clientId="api-key-123", endpoint="/products", method="GET")
+C -> GW: "GET /api/v1/products"
+GW -> RL: "check(clientId=\"api-key-123\", endpoint=\"/products\", method=\"GET\")"
 
-    RL->>RL: Evaluate rules (in-memory cache)\nMatch rule: "free-plan-products" (Token Bucket: 100 req/min)
+RL -> RL: "Evaluate rules (in-memory cache)\nMatch rule: \"free-plan-products\" (Token Bucket: 100 req/min)"
 
-    RL->>R: EVALSHA <sha1>\nKEY=rl:api-key-123:/products\nARGS=max_tokens=100, refill_rate=1.67/sec, now=0(use Redis TIME)
-    Note right of R: EVALSHA dùng SHA1 hash của Lua script đã pre-load (SCRIPT LOAD)
+RL -> R: "EVALSHA <sha1>\nKEY=rl:api-key-123:/products\nARGS=max_tokens=100, refill_rate=1.67/sec, now=0(use Redis TIME)"
+R."EVALSHA dùng SHA1 hash của Lua script đã pre-load (SCRIPT LOAD)"
 
-    alt Tokens available
-        R-->>RL: [1, 57, 1709111460]\n(allowed=1, remaining=57, reset_ts)
-        RL-->>GW: ALLOW {remaining=57, limit=100, reset=1709111460}
-        GW->>SVC: Forward request
-        SVC-->>GW: 200 OK {products}
-        GW-->>C: 200 OK\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 57\nX-RateLimit-Reset: 1709111460
-    else Bucket empty
-        R-->>RL: [0, 0, 1709111460]\n(allowed=0, remaining=0, reset_ts)
-        RL-->>GW: REJECT {remaining=0, limit=100, reset=1709111460, retryAfter=23}
-        RL->>K: Publish ViolationEvent (async, fire-and-forget)
-        GW-->>C: 429 Too Many Requests\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 0\nRetry-After: 23
-    end
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Tokens available" {
+    R -> RL: "[1, 57, 1709111460]\n(allowed=1, remaining=57, reset_ts)" {style.stroke-dash: 4}
+    RL -> GW: "ALLOW {remaining=57, limit=100, reset=1709111460}" {style.stroke-dash: 4}
+    GW -> SVC: "Forward request"
+    SVC -> GW: "200 OK {products}" {style.stroke-dash: 4}
+    GW -> C: "200 OK\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 57\nX-RateLimit-Reset: 1709111460" {style.stroke-dash: 4}
+  }
+  group_3: "else: Bucket empty" {
+    R -> RL: "[0, 0, 1709111460]\n(allowed=0, remaining=0, reset_ts)" {style.stroke-dash: 4}
+    RL -> GW: "REJECT {remaining=0, limit=100, reset=1709111460, retryAfter=23}" {style.stroke-dash: 4}
+    RL -> K: "Publish ViolationEvent (async, fire-and-forget)"
+    GW -> C: "429 Too Many Requests\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 0\nRetry-After: 23" {style.stroke-dash: 4}
+  }
+}
 ```
 
 ### Flow 2: Rule Management (Admin Path)
 
-```mermaid
-sequenceDiagram
-    actor A as Admin
-    participant RS as Rule Service
-    participant DB as PostgreSQL
-    participant K as Kafka
-    participant GW1 as Gateway Pod 1
-    participant GW2 as Gateway Pod 2
+```d2 interactive title="rate-limiter — Flow 2: Rule Management (Admin Path)"
+shape: sequence_diagram
+A: "Admin"
+RS: "Rule Service"
+DB: "PostgreSQL" {
+  icon: ./diagrams/icons/postgres.svg
+}
+K: "Kafka"
+GW1: "Gateway Pod 1"
+GW2: "Gateway Pod 2"
 
-    A->>RS: POST /api/v1/rules {name, scope, limits...}
-    RS->>RS: Validate rule definition
-    RS->>DB: INSERT INTO rate_limit_rules (...)
-    DB-->>RS: Created (id=42)
+A -> RS: "POST /api/v1/rules {name, scope, limits...}"
+RS -> RS: "Validate rule definition"
+RS -> DB: "INSERT INTO rate_limit_rules (...)"
+DB -> RS: "Created (id=42)" {style.stroke-dash: 4}
 
-    RS->>K: Publish RuleChangedEvent\n{type: "CREATED", ruleId: 42, payload: {...}}
-    RS-->>A: 201 Created {rule}
+RS -> K: "Publish RuleChangedEvent\n{type: \"CREATED\", ruleId: 42, payload: {...}}"
+RS -> A: "201 Created {rule}" {style.stroke-dash: 4}
 
-    par Broadcast to all instances
-        K-->>GW1: RuleChangedEvent
-        GW1->>GW1: Update in-memory rule cache
-    and
-        K-->>GW2: RuleChangedEvent
-        GW2->>GW2: Update in-memory rule cache
-    end
+group_1: "par — các nhánh chạy song song, không theo thứ tự dọc" {
+  group_2: "nhánh song song: Broadcast to all instances" {
+    K -> GW1: "RuleChangedEvent" {style.stroke-dash: 4}
+    GW1 -> GW1: "Update in-memory rule cache"
+  }
+  group_3: "nhánh song song: nhánh còn lại" {
+    K -> GW2: "RuleChangedEvent" {style.stroke-dash: 4}
+    GW2 -> GW2: "Update in-memory rule cache"
+  }
+}
 
-    Note over GW1,GW2: New rule active within seconds
+GW1."[GW1,GW2] New rule active within seconds"
 ```
 
 ### Flow 3: Token Bucket — Redis Lua Script (Atomic Operation)

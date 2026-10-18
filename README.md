@@ -61,7 +61,7 @@ npm run build
 
 - **Nguồn chuẩn:** sửa 5 bài `.md` ở root. `content/docs/` được sinh lại bởi `prepare-content`, `predev` và `prebuild`; không sửa bản generated.
 - **Static export:** output nằm ở `dist/`, dùng được trên Cloudflare Pages. D2/WASM và syntax highlighting chỉ chạy lúc build, không chạy trong browser.
-- **D2 layout:** mặc định dùng **TALA** cho toàn bộ diagram D2 (`layout: 'tala'` trong `source.config.ts`). Có thể override từng fence bằng `layout=elk` hoặc `layout=dagre`; Mermaid không bị ảnh hưởng.
+- **D2 layout:** mặc định dùng **TALA** cho toàn bộ diagram D2 (`layout: 'tala'` trong `source.config.ts`). Có thể override từng fence bằng `layout=elk` hoặc `layout=dagre`; Mermaid ER không bị ảnh hưởng.
 - **D2 viewer:** từ docs-kit `0.9.3`, mở sẵn với icon zoom/fit/fullscreen nổi ở góc phải canvas (không chiếm header), tự fit theo hai chiều và tối đa `90vh`; fullscreen dialog cao `90dvh`. Source nằm trong panel nổi từ icon `</>`, không có footer. Site giữ `scale: 1` và dùng giới hạn mặc định của package.
 - **D2 cache:** `.next/cache/docs-kit/d2` (đã ignore). Có thể xóa để kiểm tra cold build; cache không phải artifact deploy.
 
@@ -69,13 +69,13 @@ npm run build
 
 | Fence | Dùng khi nào | Ví dụ trong repo |
 |---|---|---|
-| `d2 interactive` | Architecture/component, flow tuyến tính; zoom/pan/fullscreen trực tiếp, source và tải SVG qua icon | §4 và §10 của cả 5 bài; §6 Flow 3 của Rate Limiter |
+| `d2 interactive` | Architecture/component và sequence (`shape: sequence_diagram`); zoom/pan/fullscreen trực tiếp, source và tải SVG qua icon | §4, §6 và §10 của cả 5 bài |
 | `protocol-exchange` | Cặp HTTP request/response, giữ header, raw body và integer ID lớn | §7 của cả 5 bài |
 | `code-walkthrough` | Đọc core Java service theo từng bước, highlight dòng và copy toàn bộ code | §9 của cả 5 bài |
 | `terminal-session` | Runbook có context và cảnh báo; **không thực thi lệnh** | §15 Rate Limiter — rollback staging |
 | `span-waterfall` | Phân tích latency qua trace có parent/child, **ghi rõ dữ liệu minh họa hay đo thật** | §13 URL Shortener — cache miss |
 
-Giữ Mermaid cho ER cardinality và sequence có `alt/par/loop` khi D2 không biểu đạt tương đương. Cây thư mục, bit layout, payload và pseudo-code vẫn là text, không ép thành diagram. Source Explorer/Code Diff chưa cần dùng khi chưa có source project hoặc thay đổi trước/sau thực sự.
+Toàn bộ sequence ở §6 dùng D2, gồm cả nhánh điều kiện, vòng lặp và xử lý song song. Group `alt` chứa các nhánh loại trừ nhau, `loop` ghi rõ phần lặp, `par` ghi rõ các nhánh song song (vị trí dọc không biểu thị thứ tự thực thi). Đây là quy ước nhãn trong diagram, không phải control-flow DSL thực thi của D2. Giữ Mermaid cho 5 ER diagram với cardinality và PK/FK/UK theo template hiện tại. Cây thư mục, bit layout, payload và pseudo-code vẫn là text, không ép thành diagram. Source Explorer/Code Diff chưa cần dùng khi chưa có source project hoặc thay đổi trước/sau thực sự.
 
 ### ✍️ Viết D2 Và Dùng Icon
 

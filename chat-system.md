@@ -640,45 +640,52 @@ Observability.OBS -> Application.NotifSvc: "monitor" {style.stroke-dash: 4}
 - Media upload: `Idempotency-Key` header, lưu trong Redis 1h
 
 ## 6. 🔄 System / App Flow
+Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là response/event như nhãn mô tả. Trong group `alt`, chỉ một nhánh được chọn; `loop` là phần lặp lại. Group `par` biểu diễn các nhánh song song, không phải thứ tự thực thi từ trên xuống.
+
 
 ### Flow 1: Gửi tin nhắn 1-1 (Send Direct Message)
 
-```mermaid
-sequenceDiagram
-    participant A as User A (Sender)
-    participant WS1 as WS Gateway #1
-    participant CS as Chat Service
-    participant DB as Cassandra
-    participant R as Redis
-    participant K as Kafka
-    participant WS2 as WS Gateway #2
-    participant B as User B (Recipient)
-    participant NS as Notification Service
+```d2 interactive title="chat-system — Flow 1: Gửi tin nhắn 1-1 (Send Direct Message)"
+shape: sequence_diagram
+A: "User A (Sender)"
+WS1: "WS Gateway #1"
+CS: "Chat Service"
+DB: "Cassandra"
+R: "Redis" {
+  icon: ./diagrams/icons/redis.svg
+}
+K: "Kafka"
+WS2: "WS Gateway #2"
+B: "User B (Recipient)"
+NS: "Notification Service"
 
-    A->>WS1: send_message {to: B, content: "Hello!", client_msg_id: "uuid-1"}
-    WS1->>CS: processMessage(msg) [gRPC]
-    CS->>R: SETNX dedup:uuid-1 EX 300
-    R-->>CS: OK (not duplicate)
-    CS->>DB: INSERT INTO messages (conv_id, msg_id, sender, content, ...)
-    DB-->>CS: ACK
-    CS->>K: publish topic=message.sent {msg}
-    CS-->>WS1: ACK {message_id: 7185492039184713770, status: SENT}
-    WS1-->>A: message_ack {message_id, status: SENT}
+A -> WS1: "send_message {to: B, content: \"Hello!\", client_msg_id: \"uuid-1\"}"
+WS1 -> CS: "processMessage(msg) [gRPC]"
+CS -> R: "SETNX dedup:uuid-1 EX 300"
+R -> CS: "OK (not duplicate)" {style.stroke-dash: 4}
+CS -> DB: "INSERT INTO messages (conv_id, msg_id, sender, content, ...)"
+DB -> CS: "ACK" {style.stroke-dash: 4}
+CS -> K: "publish topic=message.sent {msg}"
+CS -> WS1: "ACK {message_id: 7185492039184713770, status: SENT}" {style.stroke-dash: 4}
+WS1 -> A: "message_ack {message_id, status: SENT}" {style.stroke-dash: 4}
 
-    CS->>R: GET user:session:B
-    R-->>CS: {serverId: ws-gateway-2, connectionId: conn-456}
+CS -> R: "GET user:session:B"
+R -> CS: "{serverId: ws-gateway-2, connectionId: conn-456}" {style.stroke-dash: 4}
 
-    alt User B online
-        CS->>WS2: deliverMessage(msg) [gRPC]
-        WS2->>B: new_message {from: A, content: "Hello!", message_id: ...}
-        B-->>WS2: delivery_ack
-        WS2->>CS: updateStatus(msg_id, DELIVERED)
-        CS->>WS1: status_update {message_id, status: DELIVERED}
-        WS1->>A: message_status {message_id, status: DELIVERED}
-    else User B offline
-        K->>NS: consume message.sent
-        NS->>B: Push Notification (FCM/APNs)
-    end
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: User B online" {
+    CS -> WS2: "deliverMessage(msg) [gRPC]"
+    WS2 -> B: "new_message {from: A, content: \"Hello!\", message_id: ...}"
+    B -> WS2: "delivery_ack" {style.stroke-dash: 4}
+    WS2 -> CS: "updateStatus(msg_id, DELIVERED)"
+    CS -> WS1: "status_update {message_id, status: DELIVERED}"
+    WS1 -> A: "message_status {message_id, status: DELIVERED}"
+  }
+  group_3: "else: User B offline" {
+    K -> NS: "consume message.sent"
+    NS -> B: "Push Notification (FCM/APNs)"
+  }
+}
 ```
 
 **Chi tiết từng bước**:
@@ -694,29 +701,34 @@ sequenceDiagram
 
 ### Flow 2: Load lịch sử tin nhắn (Message History)
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant ALB as ALB
-    participant HS as Chat Service
-    participant R as Redis Cache
-    participant DB as Cassandra
-    participant K as Kafka
+```d2 interactive title="chat-system — Flow 2: Load lịch sử tin nhắn (Message History)"
+shape: sequence_diagram
+C: "Client"
+ALB: "ALB"
+HS: "Chat Service"
+R: "Redis Cache" {
+  icon: ./diagrams/icons/redis.svg
+}
+DB: "Cassandra"
+K: "Kafka"
 
-    C->>ALB: GET /api/v1/conversations/{id}/messages?before=<cursor>&limit=20
-    ALB->>HS: forward request
+C -> ALB: "GET /api/v1/conversations/{id}/messages?before=<cursor>&limit=20"
+ALB -> HS: "forward request"
 
-    HS->>R: GET conv:msgs:{conv_id}:page:{cursor}
-    alt Cache HIT
-        R-->>HS: [20 messages]
-        HS-->>C: 200 OK {messages, next_cursor}
-    else Cache MISS
-        HS->>DB: SELECT * FROM messages WHERE conversation_id = ? AND message_id < ? ORDER BY message_id DESC LIMIT 20
-        DB-->>HS: [20 messages]
-        HS->>R: SET conv:msgs:{conv_id}:page:{cursor} EX 300
-        HS-->>C: 200 OK {messages, next_cursor}
-    end
-    HS->>K: publish message.history_viewed {conversationId, userId, pageSize}
+HS -> R: "GET conv:msgs:{conv_id}:page:{cursor}"
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Cache HIT" {
+    R -> HS: "[20 messages]" {style.stroke-dash: 4}
+    HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
+  }
+  group_3: "else: Cache MISS" {
+    HS -> DB: "SELECT * FROM messages WHERE conversation_id = ? AND message_id < ? ORDER BY message_id DESC LIMIT 20"
+    DB -> HS: "[20 messages]" {style.stroke-dash: 4}
+    HS -> R: "SET conv:msgs:{conv_id}:page:{cursor} EX 300"
+    HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
+  }
+}
+HS -> K: "publish message.history_viewed {conversationId, userId, pageSize}"
 ```
 
 **Chi tiết**:
