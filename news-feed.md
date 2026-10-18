@@ -478,7 +478,18 @@ S3: "S3 (Media)" {
 User -> Client: "Tạo post (text + ảnh)"
 
 group_1: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "if: Post có media" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     Client -> GW: "POST /api/v1/media/presign"
     GW -> Client: "{uploadUrl, mediaKey}"
     Client -> S3: "PUT (presigned URL) — upload ảnh"
@@ -506,12 +517,29 @@ K -> FS: "Consume \"post-created\""
 FS -> FS: "Check: userId is celebrity? (Redis\nSET lookup)"
 
 group_3: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_4: "if: Normal User (< 10K followers)" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     FS -> FS: "Get follower list (from Social\nGraph cache)"
     FS -> R: "Pipeline ZADD feed:{followerId}\nfor each follower"
     R -> FS: "OK" {style.stroke-dash: 4}
   }
   group_5: "else: Celebrity User (≥ 10K followers)" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     FS -> R: "ZADD celebrity_posts:{userId}\n{postId, timestamp}"
     R -> FS: "OK" {style.stroke-dash: 4}
   }
@@ -547,10 +575,27 @@ GW -> FS: "Forward request"
 FS -> R: "ZREVRANGEBYSCORE feed:{userId}\n(get post IDs, cursor-based)"
 
 group_1: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "if: Cache HIT" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> FS: "List of post IDs (pre-computed\nfeed)" {style.stroke-dash: 4}
   }
   group_3: "else: Cache MISS" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> FS: "Empty / partial" {style.stroke-dash: 4}
     FS -> DB: "Query posts from followed users\n(fallback)"
     DB -> FS: "Post IDs" {style.stroke-dash: 4}
@@ -564,6 +609,11 @@ FS -> R: "Get celebrity list user follows\n(SET members)"
 R -> FS: "[celebrity_1, celebrity_2, ...]" {style.stroke-dash: 4}
 
 group_4: "loop — lặp lại cho Each celebrity" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   FS -> R: "ZREVRANGEBYSCORE\ncelebrity_posts:{celebId} (recent\nposts)"
   R -> FS: "Celebrity post IDs" {style.stroke-dash: 4}
 }
@@ -573,10 +623,27 @@ FS -> FS: "Merge normal feed + celebrity\nposts (dedup)"
 FS -> R: "MGET post:{id} for all post IDs\n(batch fetch post details)"
 
 group_5: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_6: "if: All posts in cache" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> FS: "Post details" {style.stroke-dash: 4}
   }
   group_7: "else: Some cache miss" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> FS: "Partial results" {style.stroke-dash: 4}
     FS -> DB: "SELECT * FROM posts WHERE id IN\n(missing IDs)"
     DB -> FS: "Missing post details" {style.stroke-dash: 4}

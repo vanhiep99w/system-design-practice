@@ -517,7 +517,18 @@ RL -> R: "EVALSHA <sha1>\nKEY=rl:api-key-123:/products\nARGS=max_tokens=100,\nre
 R."EVALSHA dùng SHA1 hash của Lua\nscript đã pre-load (SCRIPT LOAD)"
 
 group_1: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "if: Tokens available" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> RL: "[1, 57, 1709111460]\n(allowed=1, remaining=57,\nreset_ts)" {style.stroke-dash: 4}
     RL -> GW: "ALLOW {remaining=57, limit=100,\nreset=1709111460}" {style.stroke-dash: 4}
     GW -> SVC: "Forward request"
@@ -525,6 +536,12 @@ group_1: "alt — chỉ chọn một nhánh" {
     GW -> C: "200 OK\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 57\nX-RateLimit-Reset: 1709111460" {style.stroke-dash: 4}
   }
   group_3: "else: Bucket empty" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> RL: "[0, 0, 1709111460]\n(allowed=0, remaining=0, reset_ts)" {style.stroke-dash: 4}
     RL -> GW: "REJECT {remaining=0, limit=100,\nreset=1709111460, retryAfter=23}" {style.stroke-dash: 4}
     RL -> K: "Publish ViolationEvent (async,\nfire-and-forget)"
@@ -556,11 +573,28 @@ RS -> K: "Publish RuleChangedEvent\n{type: \"CREATED\", ruleId: 42,\npayload: {.
 RS -> A: "201 Created {rule}" {style.stroke-dash: 4}
 
 group_1: "par — các nhánh chạy song song, không theo thứ tự dọc" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "nhánh song song: Broadcast to all instances" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     K -> GW1: "RuleChangedEvent" {style.stroke-dash: 4}
     GW1 -> GW1: "Update in-memory rule cache"
   }
   group_3: "nhánh song song: nhánh còn lại" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     K -> GW2: "RuleChangedEvent" {style.stroke-dash: 4}
     GW2 -> GW2: "Update in-memory rule cache"
   }
@@ -580,6 +614,11 @@ R: Redis
 RL -> R: "EVALSHA <sha1>\nKEYS[1] =\n\"rl:client123:/api/products\"\nARGV = [max_tokens=10,\nrefill_rate=2, now=0(use Redis\nTIME)]"
 R."EVALSHA dùng SHA1 hash của Lua\nscript đã pre-load (SCRIPT LOAD)"
 atomic: "Lua Script (atomic)" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   R."1. GET key → {tokens: 3.2, last:\n1709110800.000}"
   R."2. now = redis.TIME(), elapsed =\nnow - last, refill = elapsed * 2"
   R."3. tokens = min(3.2 + 1.0, 10) =\n4.2"

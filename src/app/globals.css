@@ -44,6 +44,37 @@
   }
 }
 
+/* Sequence canvases need breathing room below the floating controls.
+   Scope spacing/borders to sequences without changing per-diagram height budgets. */
+.d2-sequence-frame {
+  --sequence-frame-stroke: #64748b;
+}
+
+:where(.dark, [data-theme='dark']) .d2-sequence-frame {
+  --sequence-frame-stroke: #94a3b8;
+}
+
+/* D2 gives sequence groups multiply/50% opacity, including their borders.
+   Our transparent, explicitly bordered frames should not blend into each other. */
+.d2-sequence-frame svg .shape.blend:has(> [stroke='#64748b'][fill='transparent']) {
+  mix-blend-mode: normal;
+  opacity: 1;
+}
+
+.d2-sequence-frame svg .shape > [stroke='#64748b'][fill='transparent'] {
+  stroke: var(--sequence-frame-stroke);
+  vector-effect: non-scaling-stroke;
+}
+
+.d2-sequence-frame :is(.d2-viewport, .d2-diagram-scroll) {
+  padding: 3rem 1rem 1.5rem;
+}
+
+.d2-sequence-frame :is(.d2-canvas, .d2-diagram-scroll) {
+  border: 1px solid var(--color-fd-border, #cbd5e1);
+  border-radius: 0.5rem;
+}
+
 /* Vietnamese text readability */
 .prose {
   line-height: 1.8;

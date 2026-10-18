@@ -592,11 +592,28 @@ C -> G: "POST /api/v1/urls { longUrl,\ncustomAlias? }"
 G -> U: "Forward request + JWT claims"
 U -> U: "Validate URL + policy"
 group_1: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "if: custom alias provided" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     U -> P: "Check alias uniqueness"
     P -> U: "available / conflict" {style.stroke-dash: 4}
   }
   group_3: "else: auto generated" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     U -> I: "nextId()"
     I -> U: "64-bit id" {style.stroke-dash: 4}
     U -> U: "Base62 encode -> shortCode"
@@ -630,10 +647,27 @@ E -> G: "Cache miss (or bypass)"
 G -> S: "Resolve shortCode"
 S -> R: "GET abc123x"
 group_1: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "if: Cache hit" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> S: "longUrl" {style.stroke-dash: 4}
   }
   group_3: "else: Cache miss" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     S -> P: "SELECT long_url, expires_at,\nstatus"
     P -> S: "row data" {style.stroke-dash: 4}
     S -> R: "SET abc123x -> longUrl"

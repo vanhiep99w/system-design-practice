@@ -674,7 +674,18 @@ CS -> R: "GET user:session:B"
 R -> CS: "{serverId: ws-gateway-2,\nconnectionId: conn-456}" {style.stroke-dash: 4}
 
 group_1: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "if: User B online" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     CS -> WS2: "deliverMessage(msg) [gRPC]"
     WS2 -> B: "new_message {from: A, content:\n\"Hello!\", message_id: ...}"
     B -> WS2: "delivery_ack" {style.stroke-dash: 4}
@@ -683,6 +694,12 @@ group_1: "alt — chỉ chọn một nhánh" {
     WS1 -> A: "message_status {message_id,\nstatus: DELIVERED}"
   }
   group_3: "else: User B offline" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     K -> NS: "consume message.sent"
     NS -> B: "Push Notification (FCM/APNs)"
   }
@@ -718,11 +735,28 @@ ALB -> HS: "forward request"
 
 HS -> R: "GET\nconv:msgs:{conv_id}:page:{cursor}"
 group_1: "alt — chỉ chọn một nhánh" {
+  style: {
+    fill: transparent
+    stroke: "#64748b"
+    stroke-width: 2
+  }
   group_2: "if: Cache HIT" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     R -> HS: "[20 messages]" {style.stroke-dash: 4}
     HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
   }
   group_3: "else: Cache MISS" {
+    style: {
+      fill: transparent
+      stroke: "#64748b"
+      stroke-width: 2
+      stroke-dash: 4
+    }
     HS -> DB: "SELECT * FROM messages WHERE\nconversation_id = ? AND message_id\n< ? ORDER BY message_id DESC LIMIT\n20"
     DB -> HS: "[20 messages]" {style.stroke-dash: 4}
     HS -> R: "SET\nconv:msgs:{conv_id}:page:{cursor}\nEX 300"

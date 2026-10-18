@@ -61,9 +61,28 @@ for (const slug of designs) {
     const enhanced = blocks.filter(m => /^(d2|protocol-exchange|code-walkthrough|terminal-session|span-waterfall)\b/.test(m[1]));
     assert.ok(enhanced.filter(m => m[1].startsWith('d2 ')).length >= 2);
     const prepared = rebaseDiagramIcons(enhanced.map(m => m[0]).join('\n\n'));
+    let tree;
+    const capture = () => result => { tree = result; };
     const compiled = String(await compile({
       value: prepared, cwd: root, path: join(root, 'content/docs', `${slug}.md`),
-    }, { remarkPlugins: plugins }));
+    }, { remarkPlugins: [...plugins, capture] }));
+    const attribute = (node, name) => {
+      const value = node.attributes.find(a => a.name === name).value;
+      if (typeof value === 'string') return value;
+      const expression = value.data.estree.body[0].expression;
+      return expression.type === 'Literal' ? expression.value : JSON.parse(expression.arguments[0].value);
+    };
+    for (const node of tree.children.filter(n => n.name === 'D2InteractiveDiagram')) {
+      const source = attribute(node, 'source');
+      const frames = [...source.matchAll(/^\s*(?:group_\d+|atomic): "[^"\n]+" \{$/gm)].length;
+      if (!frames) continue;
+      assert.equal((source.match(/fill: transparent/g) ?? []).length, frames, 'no stacked opaque group backgrounds');
+      for (const theme of ['lightSvg', 'darkSvg']) {
+        const svg = attribute(node, theme);
+        const borders = svg.match(/<(?:rect|path)\b[^>]*stroke="#64748b"[^>]*fill="transparent"[^>]*style="[^"]*stroke-width:2;/g) ?? [];
+        assert.equal(borders.length, frames, `${slug}: every frame needs an actual SVG border in ${theme}`);
+      }
+    }
     assert.ok(compiled.includes('D2InteractiveDiagram'));
     assert.ok(compiled.includes('ProtocolExchange'));
     assert.ok(compiled.includes('CodeWalkthrough'));

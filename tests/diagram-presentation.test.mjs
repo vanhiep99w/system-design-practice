@@ -47,6 +47,10 @@ test('sequences have individual measured budgets; short flows and all ER/archite
   assert.equal(defaults, 17);
   const css = await readFile(new URL('src/app/globals.css', root), 'utf8');
   assert.doesNotMatch(css, /--d2-(?:viewport|preview)-max-height\s*:/, 'no global height override');
+  assert.match(css, /\.d2-sequence-frame :is\(\.d2-viewport, \.d2-diagram-scroll\)\s*\{\s*padding: 3rem 1rem 1\.5rem;/);
+  assert.match(css, /\.d2-sequence-frame :is\(\.d2-canvas, \.d2-diagram-scroll\)\s*\{\s*border: 1px solid/);
+  assert.match(css, /\.d2-sequence-frame svg \.shape\.blend:has\([^}]+mix-blend-mode: normal;\s*opacity: 1;/);
+  assert.match(css, /vector-effect: non-scaling-stroke;/);
   const registry = await readFile(new URL('src/mdx-components.tsx', root), 'utf8');
   assert.match(registry, /sequenceViewportHeight\(props.source\)/);
   assert.match(registry, /D2InteractiveDiagram: InteractiveDiagram/);

@@ -63,6 +63,7 @@ npm run build
 - **Static export:** output nằm ở `dist/`, dùng được trên Cloudflare Pages. D2/WASM và syntax highlighting chỉ chạy lúc build, không chạy trong browser.
 - **D2 layout:** mặc định dùng **TALA** cho toàn bộ diagram D2 (`layout: 'tala'` trong `source.config.ts`). Có thể override từng fence bằng `layout=elk` hoặc `layout=dagre`.
 - **D2 viewer:** từ docs-kit `0.9.3`, mở sẵn với icon zoom/fit/fullscreen nổi ở góc phải canvas (không chiếm header), tự fit theo hai chiều; mặc định tối đa `90vh`. Sequence dài có thể đặt **riêng từng diagram** bằng comment `# viewport-height: 140vh` trong source D2 (host convention, không phải syntax cấu hình của D2/docs-kit). Adapter tại `src/mdx-components.tsx` áp cùng mức cho viewer và SSR/no-JS; diagram không có comment giữ nguyên `90vh`. Các flow hiện chọn `100`–`190vh` theo tỷ lệ sau khi fit chiều ngang, không áp một mức chung. Architecture/ER không đổi; fullscreen vẫn cao `90dvh`. Source nằm trong panel nổi từ icon `</>`, không có footer. Site giữ `scale: 1`. Nhãn sequence dài được ngắt dòng, không đổi thứ tự message hay payload trong ví dụ API.
+- **Sequence frames:** group ngoài có viền liền, các nhánh có viền đứt; nền trong suốt để group lồng nhau không chồng màu tối dần. Canvas có padding riêng cho thanh công cụ (`3rem` trên, `1rem` ngang, `1.5rem` dưới); không đổi chiều cao đã chọn cho từng flow.
 - **D2 cache:** `.next/cache/docs-kit/d2` (đã ignore). Có thể xóa để kiểm tra cold build; cache không phải artifact deploy.
 
 ### 🧩 Component Đang Sử Dụng
