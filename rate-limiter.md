@@ -893,52 +893,63 @@ Example:
 
 ### ER Diagram
 
-```mermaid
-erDiagram
-    RATE_LIMIT_RULES {
-        bigserial id PK
-        varchar name UK
-        varchar description
-        varchar scope
-        varchar endpoint_pattern
-        varchar method
-        varchar algorithm
-        integer max_requests
-        integer window_seconds
-        integer burst_size
-        varchar plan
-        integer priority
-        boolean enabled
-        varchar created_by
-        timestamptz created_at
-        timestamptz updated_at
-        timestamptz deleted_at
-    }
+Sơ đồ dùng D2 `sql_table`: `PK` là primary key, `FK` là foreign key và `UNQ` tương đương `UK` (unique). Đầu nối crow’s foot và nhãn `1`, `0..N`, `0..1` giữ cardinality của mô hình; đường nối gắn vào cột liên quan. Các cột cùng mang `PK` thuộc một composite primary key. DDL phía trên là nguồn chuẩn cho constraint được database thực thi.
 
-    RATE_LIMIT_OVERRIDES {
-        bigserial id PK
-        bigint rule_id FK
-        varchar client_id
-        integer max_requests
-        integer window_seconds
-        integer burst_size
-        varchar reason
-        timestamptz expire_at
-        varchar created_by
-        timestamptz created_at
-    }
+```d2 interactive title="rate-limiter — ER Diagram"
+direction: right
+RATE_LIMIT_RULES: {
+  shape: sql_table
+  "id": bigserial {constraint: primary_key}
+  "name": varchar {constraint: unique}
+  "description": varchar
+  "scope": varchar
+  "endpoint_pattern": varchar
+  "method": varchar
+  "algorithm": varchar
+  "max_requests": integer
+  "window_seconds": integer
+  "burst_size": integer
+  "plan": varchar
+  "priority": integer
+  "enabled": boolean
+  "created_by": varchar
+  "created_at": timestamptz
+  "updated_at": timestamptz
+  "deleted_at": timestamptz
+}
 
-    RATE_LIMIT_VIOLATIONS_DAILY {
-        bigint rule_id PK,FK
-        varchar client_id PK
-        date violation_date PK
-        integer violation_count
-        timestamptz first_violated_at
-        timestamptz last_violated_at
-    }
+RATE_LIMIT_OVERRIDES: {
+  shape: sql_table
+  "id": bigserial {constraint: primary_key}
+  "rule_id": bigint {constraint: foreign_key}
+  "client_id": varchar
+  "max_requests": integer
+  "window_seconds": integer
+  "burst_size": integer
+  "reason": varchar
+  "expire_at": timestamptz
+  "created_by": varchar
+  "created_at": timestamptz
+}
 
-    RATE_LIMIT_RULES ||--o{ RATE_LIMIT_OVERRIDES : "has overrides"
-    RATE_LIMIT_RULES ||--o{ RATE_LIMIT_VIOLATIONS_DAILY : "has violations"
+RATE_LIMIT_VIOLATIONS_DAILY: {
+  shape: sql_table
+  "rule_id": bigint {constraint: [primary_key; foreign_key]}
+  "client_id": varchar {constraint: primary_key}
+  "violation_date": date {constraint: primary_key}
+  "violation_count": integer
+  "first_violated_at": timestamptz
+  "last_violated_at": timestamptz
+}
+
+RATE_LIMIT_RULES."id" <-> RATE_LIMIT_OVERRIDES."rule_id": "has overrides" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+RATE_LIMIT_RULES."id" <-> RATE_LIMIT_VIOLATIONS_DAILY."rule_id": "has violations" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
 ```
 
 ### Indexing Strategy

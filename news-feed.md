@@ -996,83 +996,124 @@ CREATE INDEX idx_shares_user ON shares (user_id, created_at DESC);
 
 ### ER Diagram
 
-```mermaid
-erDiagram
-    USERS {
-        bigint user_id PK
-        varchar username UK
-        varchar email UK
-        varchar password_hash
-        varchar display_name
-        varchar avatar_url
-        varchar bio
-        int follower_count
-        int following_count
-        boolean is_celebrity
-        varchar status
-        timestamptz created_at
-        timestamptz updated_at
-    }
+Sơ đồ dùng D2 `sql_table`: `PK` là primary key, `FK` là foreign key và `UNQ` tương đương `UK` (unique). Đầu nối crow’s foot và nhãn `1`, `0..N`, `0..1` giữ cardinality của mô hình; đường nối gắn vào cột liên quan. Các cột cùng mang `PK` thuộc một composite primary key. DDL phía trên là nguồn chuẩn cho constraint được database thực thi.
 
-    POSTS {
-        bigint post_id PK
-        bigint user_id FK
-        text content
-        jsonb media_urls
-        varchar post_type
-        varchar visibility
-        bigint original_post_id FK
-        int like_count
-        int comment_count
-        int share_count
-        boolean is_deleted
-        timestamptz created_at
-        timestamptz updated_at
-    }
+```d2 interactive title="news-feed — ER Diagram"
+direction: right
+USERS: {
+  shape: sql_table
+  "user_id": bigint {constraint: primary_key}
+  "username": varchar {constraint: unique}
+  "email": varchar {constraint: unique}
+  "password_hash": varchar
+  "display_name": varchar
+  "avatar_url": varchar
+  "bio": varchar
+  "follower_count": int
+  "following_count": int
+  "is_celebrity": boolean
+  "status": varchar
+  "created_at": timestamptz
+  "updated_at": timestamptz
+}
 
-    FOLLOWS {
-        bigint follower_id PK_FK
-        bigint followee_id PK_FK
-        timestamptz created_at
-    }
+POSTS: {
+  shape: sql_table
+  "post_id": bigint {constraint: primary_key}
+  "user_id": bigint {constraint: foreign_key}
+  "content": text
+  "media_urls": jsonb
+  "post_type": varchar
+  "visibility": varchar
+  "original_post_id": bigint {constraint: foreign_key}
+  "like_count": int
+  "comment_count": int
+  "share_count": int
+  "is_deleted": boolean
+  "created_at": timestamptz
+  "updated_at": timestamptz
+}
 
-    LIKES {
-        bigint user_id PK_FK
-        bigint post_id PK_FK
-        timestamptz created_at
-    }
+FOLLOWS: {
+  shape: sql_table
+  "follower_id": bigint {constraint: [primary_key; foreign_key]}
+  "followee_id": bigint {constraint: [primary_key; foreign_key]}
+  "created_at": timestamptz
+}
 
-    COMMENTS {
-        bigint comment_id PK
-        bigint post_id FK
-        bigint user_id FK
-        text content
-        bigint parent_comment_id FK
-        int like_count
-        boolean is_deleted
-        timestamptz created_at
-        timestamptz updated_at
-    }
+LIKES: {
+  shape: sql_table
+  "user_id": bigint {constraint: [primary_key; foreign_key]}
+  "post_id": bigint {constraint: [primary_key; foreign_key]}
+  "created_at": timestamptz
+}
 
-    SHARES {
-        bigint share_id PK
-        bigint post_id FK
-        bigint user_id FK
-        text comment
-        timestamptz created_at
-    }
+COMMENTS: {
+  shape: sql_table
+  "comment_id": bigint {constraint: primary_key}
+  "post_id": bigint {constraint: foreign_key}
+  "user_id": bigint {constraint: foreign_key}
+  "content": text
+  "parent_comment_id": bigint {constraint: foreign_key}
+  "like_count": int
+  "is_deleted": boolean
+  "created_at": timestamptz
+  "updated_at": timestamptz
+}
 
-    USERS ||--o{ POSTS : "creates"
-    USERS ||--o{ FOLLOWS : "follower"
-    USERS ||--o{ FOLLOWS : "followee"
-    USERS ||--o{ LIKES : "likes"
-    USERS ||--o{ COMMENTS : "writes"
-    USERS ||--o{ SHARES : "shares"
-    POSTS ||--o{ LIKES : "has"
-    POSTS ||--o{ COMMENTS : "has"
-    POSTS ||--o{ SHARES : "has"
-    POSTS ||--o| POSTS : "original (share/repost)"
-    COMMENTS ||--o{ COMMENTS : "replies to"
+SHARES: {
+  shape: sql_table
+  "share_id": bigint {constraint: primary_key}
+  "post_id": bigint {constraint: foreign_key}
+  "user_id": bigint {constraint: foreign_key}
+  "comment": text
+  "created_at": timestamptz
+}
+
+USERS."user_id" <-> POSTS."user_id": "creates" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."user_id" <-> FOLLOWS."follower_id": "follower" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."user_id" <-> FOLLOWS."followee_id": "followee" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."user_id" <-> LIKES."user_id": "likes" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."user_id" <-> COMMENTS."user_id": "writes" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."user_id" <-> SHARES."user_id": "shares" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+POSTS."post_id" <-> LIKES."post_id": "has" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+POSTS."post_id" <-> COMMENTS."post_id": "has" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+POSTS."post_id" <-> SHARES."post_id": "has" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+POSTS."post_id" <-> POSTS."original_post_id": "original (share/repost)" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..1" {shape: cf-one}
+}
+COMMENTS."comment_id" <-> COMMENTS."parent_comment_id": "replies to" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
 ```
 
 ### Indexing Strategy

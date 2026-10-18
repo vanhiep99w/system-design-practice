@@ -47,7 +47,7 @@ system-design-practice/
 └── payment-system.md            # Thiết kế Payment System
 ```
 
-> 💡 Ưu tiên **D2** trực tiếp trong file markdown qua `@vanhiep99w/docs-kit`. Giữ **Mermaid** cho sequence có `alt/par/loop` và ER có cardinality khi chuyển sang D2 làm giảm ngữ nghĩa. ASCII chỉ dành cho cây thư mục, bit layout hoặc text theo vị trí; không dùng cho architecture mới. Icon đã kiểm tra từ https://icons.d2lang.com/ lưu trong `diagrams/icons/` và nhúng lúc build.
+> 💡 Dùng **D2** trực tiếp trong file markdown qua `@vanhiep99w/docs-kit` cho mọi diagram. Sequence dùng `shape: sequence_diagram` với group ghi rõ nhánh loại trừ nhau, phần lặp và nhánh song song; ER dùng `shape: sql_table` với constraints và crow’s-foot arrowheads. Không thêm lại Mermaid renderer/dependency. ASCII chỉ dành cho cây thư mục, bit layout hoặc text theo vị trí; không dùng cho architecture mới. Icon đã kiểm tra từ https://icons.d2lang.com/ lưu trong `diagrams/icons/` và nhúng lúc build.
 
 ## 📐 Template Bài Thiết Kế
 
@@ -143,7 +143,7 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 
 ## 4. 🧩 Defining Entities / Components
 - **Component diagram** bắt buộc (D2 container/connection)
-- Sử dụng D2 container để nhóm theo layer (Edge, Application, Data, Async, Observability); `subgraph` chỉ dùng khi giữ Mermaid.
+- Sử dụng D2 container để nhóm theo layer (Edge, Application, Data, Async, Observability).
 - Kèm **bảng** mô tả vai trò từng component: `Component | Vai trò`
 - Các thành phần điển hình: Client, CDN/WAF, API Gateway, Services, Database, Cache, Message Queue, Observability stack
 
@@ -157,14 +157,14 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 ## 6. 🔄 System / App Flow
 
 ### Flow 1: [Core use case chính - ví dụ: Create]
-- **Sequence diagram** bắt buộc: D2 cho flow tuyến tính; Mermaid khi cần branching chính xác
+- **Sequence diagram D2** bắt buộc (`shape: sequence_diagram`)
 - Bao gồm tất cả participants: Client, Gateway, Services, DB, Cache, Queue
-- Thể hiện rõ `alt/else` cho branching logic (ví dụ: custom alias vs auto-generated)
+- Dùng group có nhãn rõ điều kiện `if/else` và group cha `alt — chỉ chọn một nhánh` cho branching logic (ví dụ: custom alias vs auto-generated)
 
 ### Flow 2: [Core use case thứ hai - ví dụ: Read/Query]
-- **Sequence diagram** bắt buộc: giữ Mermaid nếu có `alt/par/loop`
-- Thể hiện cache hit/miss logic
-- Thể hiện async operations (ví dụ: publish event to Kafka)
+- **Sequence diagram D2** bắt buộc; group `alt`, `par`, `loop` là quy ước nhãn, không phải control-flow DSL của D2
+- Thể hiện cache hit/miss bằng nhánh loại trừ nhau; ghi rõ phần lặp và các nhánh song song (vị trí dọc không ngụ ý thứ tự thực thi)
+- Thể hiện async operations (ví dụ: publish event to Kafka) bằng nhãn rõ ràng
 
 ### Error handling & Edge cases
 - Liệt kê từng error case cụ thể kèm HTTP status code và behavior
@@ -204,9 +204,10 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 - Mỗi bảng có schema riêng, không gộp
 
 ### ER Diagram
-- **Mermaid erDiagram** bắt buộc
-- Thể hiện rõ relationship cardinality (1-1, 1-N, N-N)
-- Liệt kê columns với data type và PK/FK/UK markers
+- **D2 `sql_table`** bắt buộc; quote tên cột trùng reserved keyword
+- Thể hiện rõ relationship cardinality bằng crow’s foot: `cf-one-required`, `cf-one`, `cf-many`, `cf-many-required`; dùng `<->` để cả hai đầu nối xuất hiện
+- Liệt kê columns với data type và constraints `primary_key`/`foreign_key`/`unique`; dùng array khi một cột vừa PK vừa FK. `unique` hiển thị `UNQ`, tương đương `UK`
+- Đường nối gắn đúng cột; phân biệt tham chiếu logic với foreign key được database thực thi. DDL là nguồn chuẩn
 
 ### Indexing Strategy
 - Liệt kê từng index: tên, columns, loại (unique, partial, composite)
@@ -411,7 +412,7 @@ Các hướng optimize điển hình:
 - **Code/API/Schema**: Tiếng Anh
 
 ### Định dạng
-- Ưu tiên **D2 diagrams** cho architecture, component và flow tuyến tính. Giữ **Mermaid** cho ER cardinality và sequence branching khi phù hợp.
+- Dùng **D2 diagrams** cho architecture, component, sequence có nhánh/vòng lặp/song song và ER có cardinality. Không thêm lại Mermaid.
 - Sử dụng **bảng** (tables) cho so sánh, capacity estimation
 - Sử dụng **code blocks** cho API definitions, schema, config
 - Sử dụng **callout blocks** (> ⚠️, > 💡, > 📌) cho notes quan trọng
@@ -423,7 +424,7 @@ Các hướng optimize điển hình:
 - Data modeling phải có **schema chi tiết** với data types
 - Trade-offs phải có **bảng so sánh** pros/cons
 
-### Diagrams (D2 + Mermaid)
+### Diagrams (D2)
 - **Component Diagram**: Bắt buộc trong section 4 (Entities/Components)
 - **Sequence Diagram**: Bắt buộc trong section 6 (System Flow) — ít nhất 2 flows
 - **ER Diagram**: Bắt buộc trong section 8 (Data Modeling)
@@ -434,8 +435,8 @@ Các hướng optimize điển hình:
 1. Tạo file mới ở **root folder** với tên dạng `kebab-case.md`
 2. Copy template từ trên vào file mới
 3. Điền nội dung chi tiết cho từng section theo thứ tự 1 → 17
-4. Chạy `npm test`, `npm run typecheck`, `npm run build` để kiểm tra D2/docs-kit và kiểm tra Mermaid trong browser.
-5. Viết diagram bằng **D2** hoặc **Mermaid**; icon local được nhúng SVG lúc build, không dùng ảnh chụp diagram. Giữ nguyên 17 section.
+4. Chạy `npm test`, `npm run typecheck`, `npm run build` và kiểm tra D2/docs-kit trong browser (sáng/tối, mobile, không JavaScript).
+5. Viết diagram bằng **D2**; icon local được nhúng SVG lúc build, không dùng ảnh chụp diagram. Giữ nguyên 17 section.
 6. Cập nhật bảng danh sách bài trong `README.md`
 6. Review lại toàn bộ nội dung trước khi hoàn tất
 

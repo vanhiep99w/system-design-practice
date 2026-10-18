@@ -54,11 +54,10 @@ for (const slug of designs) {
     const sections = [...content.matchAll(/^## (\d+)\./gm)].map(m => Number(m[1]));
     assert.deepEqual(sections, Array.from({ length: 17 }, (_, i) => i + 1));
     const blocks = fences(content);
-    assert.equal(blocks.filter(m => m[1] === 'mermaid' && /^flowchart/m.test(m[2])).length, 0);
-    assert.equal(blocks.filter(m => m[1] === 'mermaid' && /^sequenceDiagram/m.test(m[2])).length, 0);
+    assert.equal(blocks.filter(m => m[1] === 'mermaid').length, 0, 'all diagrams use build-time D2');
     const sequences = blocks.filter(m => /^d2\b/.test(m[1]) && /^shape: sequence_diagram$/m.test(m[2]));
     assert.ok(sequences.length >= 2, 'core use cases must retain sequence diagrams');
-    assert.equal(blocks.filter(m => m[1] === 'mermaid' && /^erDiagram/m.test(m[2])).length, 1);
+    assert.equal(blocks.filter(m => /^d2\b/.test(m[1]) && /shape: sql_table/m.test(m[2])).length, 1);
     const enhanced = blocks.filter(m => /^(d2|protocol-exchange|code-walkthrough|terminal-session|span-waterfall)\b/.test(m[1]));
     assert.ok(enhanced.filter(m => m[1].startsWith('d2 ')).length >= 2);
     const prepared = rebaseDiagramIcons(enhanced.map(m => m[0]).join('\n\n'));
@@ -130,6 +129,42 @@ test('all migrated sequences retain message counts, dashed responses, branches, 
       assert.equal((source.match(/style.stroke-dash: 4/g) ?? []).length, responses, `${slug} flow ${i + 1}: responses/events`);
       for (const label of labels) assert.ok(source.includes(label), `${slug}: missing ${label}`);
     }
+  }
+});
+
+test('D2 ER diagrams preserve every table, column, type, key marker and crow’s-foot relationship', async () => {
+  // Snapshot of the pre-migration ER schema; row endpoints resolve the existing logical relationships.
+  const contracts = JSON.parse(await readFile(join(root, 'tests/fixtures/er-contracts.json'), 'utf8'));
+  const markers = { primary_key: 'PK', foreign_key: 'FK', unique: 'UK' };
+  for (const slug of designs) {
+    const content = await readFile(join(root, `${slug}.md`), 'utf8');
+    const er = fences(content).find(m => /^d2\b/.test(m[1]) && /shape: sql_table/m.test(m[2]))[2];
+    const tables = {};
+    for (const [, table, fields] of er.matchAll(/^(\w+): \{\n  shape: sql_table\n([\s\S]*?)^\}/gm)) {
+      tables[table] = {};
+      for (const [, name, type, constraint] of fields.matchAll(/^  "([^"]+)": (\w+)(?: \{constraint: ([^}]+)\})?$/gm)) {
+        const keys = constraint?.replace(/[\[\]]/g, '').split(';').map(c => markers[c.trim()]);
+        if (keys) assert.ok(keys.every(Boolean), `${slug}: unknown key marker`);
+        tables[table][name] = type + (keys ? ` ${keys.join(',')}` : '');
+      }
+    }
+    const edges = [...er.matchAll(/^(\w+\."[^"]+") <-> (\w+\."[^"]+"): "([^"]+)" \{\n  source-arrowhead: "1" \{shape: (\S+)\}\n  target-arrowhead: "(0\.\.N|0\.\.1)" \{shape: (\S+)\}\n\}/gm)]
+      .map(([, source, target, label, sourceShape, cardinality, targetShape]) => {
+        assert.equal(sourceShape, 'cf-one-required');
+        assert.equal(targetShape, cardinality === '0..N' ? 'cf-many' : 'cf-one');
+        return { source, target, label, sourceShape, targetShape };
+      });
+    assert.deepEqual(tables, contracts[slug].tables, `${slug}: table/column/key contract`);
+    assert.deepEqual(edges, contracts[slug].edges, `${slug}: relationship endpoints and cardinalities`);
+  }
+});
+
+test('D2-only integration does not retain the Mermaid browser renderer', async () => {
+  const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  assert.equal(manifest.dependencies.mermaid, undefined);
+  assert.equal(manifest.dependencies['unist-util-visit'], undefined);
+  for (const path of ['source.config.ts', 'src/mdx-components.tsx']) {
+    assert.doesNotMatch(await readFile(join(root, path), 'utf8'), /Mermaid/);
   }
 });
 

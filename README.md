@@ -61,7 +61,7 @@ npm run build
 
 - **Nguồn chuẩn:** sửa 5 bài `.md` ở root. `content/docs/` được sinh lại bởi `prepare-content`, `predev` và `prebuild`; không sửa bản generated.
 - **Static export:** output nằm ở `dist/`, dùng được trên Cloudflare Pages. D2/WASM và syntax highlighting chỉ chạy lúc build, không chạy trong browser.
-- **D2 layout:** mặc định dùng **TALA** cho toàn bộ diagram D2 (`layout: 'tala'` trong `source.config.ts`). Có thể override từng fence bằng `layout=elk` hoặc `layout=dagre`; Mermaid ER không bị ảnh hưởng.
+- **D2 layout:** mặc định dùng **TALA** cho toàn bộ diagram D2 (`layout: 'tala'` trong `source.config.ts`). Có thể override từng fence bằng `layout=elk` hoặc `layout=dagre`.
 - **D2 viewer:** từ docs-kit `0.9.3`, mở sẵn với icon zoom/fit/fullscreen nổi ở góc phải canvas (không chiếm header), tự fit theo hai chiều và tối đa `90vh`; fullscreen dialog cao `90dvh`. Source nằm trong panel nổi từ icon `</>`, không có footer. Site giữ `scale: 1` và dùng giới hạn mặc định của package.
 - **D2 cache:** `.next/cache/docs-kit/d2` (đã ignore). Có thể xóa để kiểm tra cold build; cache không phải artifact deploy.
 
@@ -69,13 +69,13 @@ npm run build
 
 | Fence | Dùng khi nào | Ví dụ trong repo |
 |---|---|---|
-| `d2 interactive` | Architecture/component và sequence (`shape: sequence_diagram`); zoom/pan/fullscreen trực tiếp, source và tải SVG qua icon | §4, §6 và §10 của cả 5 bài |
+| `d2 interactive` | Architecture/component, sequence (`shape: sequence_diagram`) và ER (`shape: sql_table`); zoom/pan/fullscreen trực tiếp, source và tải SVG qua icon | §4, §6, §8 và §10 của cả 5 bài |
 | `protocol-exchange` | Cặp HTTP request/response, giữ header, raw body và integer ID lớn | §7 của cả 5 bài |
 | `code-walkthrough` | Đọc core Java service theo từng bước, highlight dòng và copy toàn bộ code | §9 của cả 5 bài |
 | `terminal-session` | Runbook có context và cảnh báo; **không thực thi lệnh** | §15 Rate Limiter — rollback staging |
 | `span-waterfall` | Phân tích latency qua trace có parent/child, **ghi rõ dữ liệu minh họa hay đo thật** | §13 URL Shortener — cache miss |
 
-Toàn bộ sequence ở §6 dùng D2, gồm cả nhánh điều kiện, vòng lặp và xử lý song song. Group `alt` chứa các nhánh loại trừ nhau, `loop` ghi rõ phần lặp, `par` ghi rõ các nhánh song song (vị trí dọc không biểu thị thứ tự thực thi). Đây là quy ước nhãn trong diagram, không phải control-flow DSL thực thi của D2. Giữ Mermaid cho 5 ER diagram với cardinality và PK/FK/UK theo template hiện tại. Cây thư mục, bit layout, payload và pseudo-code vẫn là text, không ép thành diagram. Source Explorer/Code Diff chưa cần dùng khi chưa có source project hoặc thay đổi trước/sau thực sự.
+Toàn bộ sequence ở §6 dùng D2, gồm cả nhánh điều kiện, vòng lặp và xử lý song song. Group `alt` chứa các nhánh loại trừ nhau, `loop` ghi rõ phần lặp, `par` ghi rõ các nhánh song song (vị trí dọc không biểu thị thứ tự thực thi). Đây là quy ước nhãn trong diagram, không phải control-flow DSL thực thi của D2. ER diagram ở §8 dùng `sql_table`, constraint `primary_key`/`foreign_key`/`unique` (hỗ trợ array cho PK+FK) và đầu nối crow’s foot `cf-one-required`/`cf-many`/`cf-one` để giữ cardinality. Renderer, remark plugin và dependency Mermaid đã được gỡ. Cây thư mục, bit layout, payload và pseudo-code vẫn là text, không ép thành diagram. Source Explorer/Code Diff chưa cần dùng khi chưa có source project hoặc thay đổi trước/sau thực sự.
 
 ### ✍️ Viết D2 Và Dùng Icon
 
@@ -92,6 +92,7 @@ api -> cache: GET mapping
 ````
 
 - Diagram nằm trực tiếp trong Markdown. Các fence được compile qua remark plugin trong `source.config.ts`; React component map ở `src/mdx-components.tsx`, CSS trong `src/app/globals.css`.
+- ER: dùng [`sql_table`](https://www.d2lang.com/tour/sql-tables/), quote tên cột trùng reserved keyword (ví dụ `"type"`), constraint kép như `constraint: [primary_key; foreign_key]`. `unique` hiển thị là `UNQ`, tương đương `UK` ở sơ đồ cũ. Nối đúng `TABLE."column"` và dùng cả hai arrowhead (`<->`) để hiển thị [crow’s foot](https://www.d2lang.com/tour/connections/#arrowheads). Các tham chiếu logic không đồng nghĩa với SQL foreign key được database enforce; DDL vẫn là nguồn chuẩn.
 - Icon chọn từ [D2 Icons](https://icons.d2lang.com/) đã được lưu tại `diagrams/icons/`; URL nguồn nằm trong [`sources.json`](./diagrams/icons/sources.json). Dùng icon đúng dịch vụ, không dùng biểu tượng AWS cho công nghệ self-hosted tương ứng.
 - Viết `icon: ./diagrams/icons/<name>.svg` trên một dòng riêng trong D2 ở file root. Pipeline tự đổi đường dẫn thành `../../diagrams/icons/…` ở bản generated và nhúng SVG từ allowlist `assetsRoot`; người đọc không phải gọi CDN icon.
 - Icon mới cần được review, lưu local và bổ sung URL gốc vào `sources.json`. Không trỏ `assetsRoot` vào toàn bộ repo hoặc dùng symlink.

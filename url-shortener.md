@@ -777,29 +777,36 @@ CREATE TABLE url_stats_daily (
 ```
 
 ### ER Diagram
-```mermaid
-erDiagram
-    SHORT_URLS ||--o{ URL_STATS_DAILY : has
+Sơ đồ dùng D2 `sql_table`: `PK` là primary key, `FK` là foreign key và `UNQ` tương đương `UK` (unique). Đầu nối crow’s foot và nhãn `1`, `0..N`, `0..1` giữ cardinality của mô hình; đường nối gắn vào cột liên quan. Các cột cùng mang `PK` thuộc một composite primary key. DDL phía trên là nguồn chuẩn cho constraint được database thực thi.
 
-    SHORT_URLS {
-        bigint id PK
-        varchar short_code UK
-        text long_url
-        bigint user_id
-        varchar status
-        timestamptz expires_at
-        timestamptz created_at
-        timestamptz updated_at
-    }
+```d2 interactive title="url-shortener — ER Diagram"
+direction: down
+SHORT_URLS: {
+  shape: sql_table
+  "id": bigint {constraint: primary_key}
+  "short_code": varchar {constraint: unique}
+  "long_url": text
+  "user_id": bigint
+  "status": varchar
+  "expires_at": timestamptz
+  "created_at": timestamptz
+  "updated_at": timestamptz
+}
 
-    URL_STATS_DAILY {
-        varchar short_code FK
-        date stat_date PK
-        bigint click_count
-        bigint unique_ip_count
-        varchar top_country
-        timestamptz updated_at
-    }
+URL_STATS_DAILY: {
+  shape: sql_table
+  "short_code": varchar {constraint: foreign_key}
+  "stat_date": date {constraint: primary_key}
+  "click_count": bigint
+  "unique_ip_count": bigint
+  "top_country": varchar
+  "updated_at": timestamptz
+}
+
+SHORT_URLS."short_code" <-> URL_STATS_DAILY."short_code": "has" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
 ```
 
 ### Indexing Strategy

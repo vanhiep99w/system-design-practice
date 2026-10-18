@@ -741,43 +741,54 @@ CREATE TABLE idempotency_keys (
 
 ### ER Diagram
 
-```mermaid
-erDiagram
-    USERS {
-        bigint id PK
-        varchar username UK
-        varchar email UK
-        varchar password_hash
-        varchar plan
-        timestamptz created_at
-        timestamptz updated_at
-    }
+Sơ đồ dùng D2 `sql_table`: `PK` là primary key, `FK` là foreign key và `UNQ` tương đương `UK` (unique). Đầu nối crow’s foot và nhãn `1`, `0..N`, `0..1` giữ cardinality của mô hình; đường nối gắn vào cột liên quan. Các cột cùng mang `PK` thuộc một composite primary key. DDL phía trên là nguồn chuẩn cho constraint được database thực thi.
 
-    PASTE_METADATA {
-        bigint id PK
-        varchar short_code UK
-        varchar title
-        varchar language
-        varchar visibility
-        varchar status
-        varchar s3_key
-        integer content_size
-        bigint user_id FK
-        boolean burn_after_read
-        integer view_count
-        timestamptz expire_at
-        timestamptz created_at
-        timestamptz updated_at
-    }
+```d2 interactive title="paste-bin — ER Diagram"
+direction: right
+USERS: {
+  shape: sql_table
+  "id": bigint {constraint: primary_key}
+  "username": varchar {constraint: unique}
+  "email": varchar {constraint: unique}
+  "password_hash": varchar
+  "plan": varchar
+  "created_at": timestamptz
+  "updated_at": timestamptz
+}
 
-    PASTE_VIEW_DAILY {
-        bigint paste_id PK,FK
-        date view_date PK
-        integer view_count
-    }
+PASTE_METADATA: {
+  shape: sql_table
+  "id": bigint {constraint: primary_key}
+  "short_code": varchar {constraint: unique}
+  "title": varchar
+  "language": varchar
+  "visibility": varchar
+  "status": varchar
+  "s3_key": varchar
+  "content_size": integer
+  "user_id": bigint {constraint: foreign_key}
+  "burn_after_read": boolean
+  "view_count": integer
+  "expire_at": timestamptz
+  "created_at": timestamptz
+  "updated_at": timestamptz
+}
 
-    USERS ||--o{ PASTE_METADATA : "owns"
-    PASTE_METADATA ||--o{ PASTE_VIEW_DAILY : "has daily views"
+PASTE_VIEW_DAILY: {
+  shape: sql_table
+  "paste_id": bigint {constraint: [primary_key; foreign_key]}
+  "view_date": date {constraint: primary_key}
+  "view_count": integer
+}
+
+USERS."id" <-> PASTE_METADATA."user_id": "owns" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+PASTE_METADATA."id" <-> PASTE_VIEW_DAILY."paste_id": "has daily views" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
 ```
 
 ### Indexing Strategy

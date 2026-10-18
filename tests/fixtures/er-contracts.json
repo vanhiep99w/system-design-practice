@@ -1,0 +1,393 @@
+{
+  "url-shortener": {
+    "tables": {
+      "SHORT_URLS": {
+        "id": "bigint PK",
+        "short_code": "varchar UK",
+        "long_url": "text",
+        "user_id": "bigint",
+        "status": "varchar",
+        "expires_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "URL_STATS_DAILY": {
+        "short_code": "varchar FK",
+        "stat_date": "date PK",
+        "click_count": "bigint",
+        "unique_ip_count": "bigint",
+        "top_country": "varchar",
+        "updated_at": "timestamptz"
+      }
+    },
+    "edges": [
+      {
+        "source": "SHORT_URLS.\"short_code\"",
+        "target": "URL_STATS_DAILY.\"short_code\"",
+        "label": "has",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      }
+    ]
+  },
+  "paste-bin": {
+    "tables": {
+      "USERS": {
+        "id": "bigint PK",
+        "username": "varchar UK",
+        "email": "varchar UK",
+        "password_hash": "varchar",
+        "plan": "varchar",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "PASTE_METADATA": {
+        "id": "bigint PK",
+        "short_code": "varchar UK",
+        "title": "varchar",
+        "language": "varchar",
+        "visibility": "varchar",
+        "status": "varchar",
+        "s3_key": "varchar",
+        "content_size": "integer",
+        "user_id": "bigint FK",
+        "burn_after_read": "boolean",
+        "view_count": "integer",
+        "expire_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "PASTE_VIEW_DAILY": {
+        "paste_id": "bigint PK,FK",
+        "view_date": "date PK",
+        "view_count": "integer"
+      }
+    },
+    "edges": [
+      {
+        "source": "USERS.\"id\"",
+        "target": "PASTE_METADATA.\"user_id\"",
+        "label": "owns",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "PASTE_METADATA.\"id\"",
+        "target": "PASTE_VIEW_DAILY.\"paste_id\"",
+        "label": "has daily views",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      }
+    ]
+  },
+  "chat-system": {
+    "tables": {
+      "USERS": {
+        "id": "bigint PK",
+        "username": "varchar UK",
+        "email": "varchar UK",
+        "password_hash": "varchar",
+        "display_name": "varchar",
+        "avatar_url": "varchar",
+        "status_message": "varchar",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      },
+      "CONVERSATIONS": {
+        "id": "bigint PK",
+        "type": "varchar",
+        "name": "varchar",
+        "avatar_url": "varchar",
+        "created_by": "bigint FK",
+        "created_at": "timestamp",
+        "updated_at": "timestamp"
+      },
+      "CONVERSATION_MEMBERS": {
+        "conversation_id": "bigint PK,FK",
+        "user_id": "bigint PK,FK",
+        "role": "varchar",
+        "joined_at": "timestamp",
+        "last_read_message_id": "bigint",
+        "muted_until": "timestamp",
+        "notifications_enabled": "boolean"
+      },
+      "MESSAGES": {
+        "conversation_id": "bigint PK",
+        "message_id": "bigint PK",
+        "sender_id": "bigint",
+        "content": "text",
+        "type": "text",
+        "media_url": "text",
+        "reply_to_message_id": "bigint",
+        "created_at": "timestamp",
+        "deleted_at": "timestamp"
+      },
+      "USER_CONTACTS": {
+        "user_id": "bigint PK,FK",
+        "contact_user_id": "bigint PK,FK",
+        "nickname": "varchar",
+        "blocked": "boolean",
+        "created_at": "timestamp"
+      },
+      "DEVICE_TOKENS": {
+        "id": "bigint PK",
+        "user_id": "bigint FK",
+        "platform": "varchar",
+        "token": "varchar",
+        "active": "boolean",
+        "created_at": "timestamp"
+      }
+    },
+    "edges": [
+      {
+        "source": "USERS.\"id\"",
+        "target": "CONVERSATIONS.\"created_by\"",
+        "label": "creates",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"id\"",
+        "target": "CONVERSATION_MEMBERS.\"user_id\"",
+        "label": "joins",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "CONVERSATIONS.\"id\"",
+        "target": "CONVERSATION_MEMBERS.\"conversation_id\"",
+        "label": "has members",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "CONVERSATIONS.\"id\"",
+        "target": "MESSAGES.\"conversation_id\"",
+        "label": "contains",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"id\"",
+        "target": "MESSAGES.\"sender_id\"",
+        "label": "sends",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"id\"",
+        "target": "USER_CONTACTS.\"user_id\"",
+        "label": "has contacts",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"id\"",
+        "target": "DEVICE_TOKENS.\"user_id\"",
+        "label": "has devices",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      }
+    ]
+  },
+  "news-feed": {
+    "tables": {
+      "USERS": {
+        "user_id": "bigint PK",
+        "username": "varchar UK",
+        "email": "varchar UK",
+        "password_hash": "varchar",
+        "display_name": "varchar",
+        "avatar_url": "varchar",
+        "bio": "varchar",
+        "follower_count": "int",
+        "following_count": "int",
+        "is_celebrity": "boolean",
+        "status": "varchar",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "POSTS": {
+        "post_id": "bigint PK",
+        "user_id": "bigint FK",
+        "content": "text",
+        "media_urls": "jsonb",
+        "post_type": "varchar",
+        "visibility": "varchar",
+        "original_post_id": "bigint FK",
+        "like_count": "int",
+        "comment_count": "int",
+        "share_count": "int",
+        "is_deleted": "boolean",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "FOLLOWS": {
+        "follower_id": "bigint PK,FK",
+        "followee_id": "bigint PK,FK",
+        "created_at": "timestamptz"
+      },
+      "LIKES": {
+        "user_id": "bigint PK,FK",
+        "post_id": "bigint PK,FK",
+        "created_at": "timestamptz"
+      },
+      "COMMENTS": {
+        "comment_id": "bigint PK",
+        "post_id": "bigint FK",
+        "user_id": "bigint FK",
+        "content": "text",
+        "parent_comment_id": "bigint FK",
+        "like_count": "int",
+        "is_deleted": "boolean",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "SHARES": {
+        "share_id": "bigint PK",
+        "post_id": "bigint FK",
+        "user_id": "bigint FK",
+        "comment": "text",
+        "created_at": "timestamptz"
+      }
+    },
+    "edges": [
+      {
+        "source": "USERS.\"user_id\"",
+        "target": "POSTS.\"user_id\"",
+        "label": "creates",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"user_id\"",
+        "target": "FOLLOWS.\"follower_id\"",
+        "label": "follower",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"user_id\"",
+        "target": "FOLLOWS.\"followee_id\"",
+        "label": "followee",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"user_id\"",
+        "target": "LIKES.\"user_id\"",
+        "label": "likes",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"user_id\"",
+        "target": "COMMENTS.\"user_id\"",
+        "label": "writes",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "USERS.\"user_id\"",
+        "target": "SHARES.\"user_id\"",
+        "label": "shares",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "POSTS.\"post_id\"",
+        "target": "LIKES.\"post_id\"",
+        "label": "has",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "POSTS.\"post_id\"",
+        "target": "COMMENTS.\"post_id\"",
+        "label": "has",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "POSTS.\"post_id\"",
+        "target": "SHARES.\"post_id\"",
+        "label": "has",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "POSTS.\"post_id\"",
+        "target": "POSTS.\"original_post_id\"",
+        "label": "original (share/repost)",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-one"
+      },
+      {
+        "source": "COMMENTS.\"comment_id\"",
+        "target": "COMMENTS.\"parent_comment_id\"",
+        "label": "replies to",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      }
+    ]
+  },
+  "rate-limiter": {
+    "tables": {
+      "RATE_LIMIT_RULES": {
+        "id": "bigserial PK",
+        "name": "varchar UK",
+        "description": "varchar",
+        "scope": "varchar",
+        "endpoint_pattern": "varchar",
+        "method": "varchar",
+        "algorithm": "varchar",
+        "max_requests": "integer",
+        "window_seconds": "integer",
+        "burst_size": "integer",
+        "plan": "varchar",
+        "priority": "integer",
+        "enabled": "boolean",
+        "created_by": "varchar",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "deleted_at": "timestamptz"
+      },
+      "RATE_LIMIT_OVERRIDES": {
+        "id": "bigserial PK",
+        "rule_id": "bigint FK",
+        "client_id": "varchar",
+        "max_requests": "integer",
+        "window_seconds": "integer",
+        "burst_size": "integer",
+        "reason": "varchar",
+        "expire_at": "timestamptz",
+        "created_by": "varchar",
+        "created_at": "timestamptz"
+      },
+      "RATE_LIMIT_VIOLATIONS_DAILY": {
+        "rule_id": "bigint PK,FK",
+        "client_id": "varchar PK",
+        "violation_date": "date PK",
+        "violation_count": "integer",
+        "first_violated_at": "timestamptz",
+        "last_violated_at": "timestamptz"
+      }
+    },
+    "edges": [
+      {
+        "source": "RATE_LIMIT_RULES.\"id\"",
+        "target": "RATE_LIMIT_OVERRIDES.\"rule_id\"",
+        "label": "has overrides",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      },
+      {
+        "source": "RATE_LIMIT_RULES.\"id\"",
+        "target": "RATE_LIMIT_VIOLATIONS_DAILY.\"rule_id\"",
+        "label": "has violations",
+        "sourceShape": "cf-one-required",
+        "targetShape": "cf-many"
+      }
+    ]
+  }
+}

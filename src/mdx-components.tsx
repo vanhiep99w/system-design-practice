@@ -12,13 +12,11 @@ import { ProtocolExchange } from '@vanhiep99w/docs-kit/components/protocol-excha
 import { CodeWalkthrough } from '@vanhiep99w/docs-kit/components/code-walkthrough';
 import { TerminalSession } from '@vanhiep99w/docs-kit/components/terminal-session';
 import { SpanWaterfall } from '@vanhiep99w/docs-kit/components/span-waterfall';
-import { MermaidDiagram } from '@/components/mermaid';
 
 // Import React entry points only: D2/WASM, YAML and Shiki stay build-time.
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   return {
     ...defaultMdxComponents,
-    MermaidDiagram,
     D2Diagram,
     D2InteractiveDiagram,
     ProtocolExchange,

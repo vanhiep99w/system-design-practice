@@ -1110,76 +1110,107 @@ CREATE TABLE messages (
 
 ### ER Diagram
 
-```mermaid
-erDiagram
-    USERS {
-        bigint id PK
-        varchar username UK
-        varchar email UK
-        varchar password_hash
-        varchar display_name
-        varchar avatar_url
-        varchar status_message
-        timestamp created_at
-        timestamp updated_at
-    }
+Sơ đồ dùng D2 `sql_table`: `PK` là primary key, `FK` là foreign key và `UNQ` tương đương `UK` (unique). Đầu nối crow’s foot và nhãn `1`, `0..N`, `0..1` giữ cardinality của mô hình; đường nối gắn vào cột liên quan. Các cột cùng mang `PK` thuộc một composite primary key. DDL phía trên là nguồn chuẩn cho constraint được database thực thi.
 
-    CONVERSATIONS {
-        bigint id PK
-        varchar type
-        varchar name
-        varchar avatar_url
-        bigint created_by FK
-        timestamp created_at
-        timestamp updated_at
-    }
+`MESSAGES` nằm trong Cassandra; các đường nối tới bảng này là tham chiếu logic, không phải SQL foreign key được Cassandra enforce.
 
-    CONVERSATION_MEMBERS {
-        bigint conversation_id PK_FK
-        bigint user_id PK_FK
-        varchar role
-        timestamp joined_at
-        bigint last_read_message_id
-        timestamp muted_until
-        boolean notifications_enabled
-    }
+```d2 interactive title="chat-system — ER Diagram"
+direction: right
+USERS: {
+  shape: sql_table
+  "id": bigint {constraint: primary_key}
+  "username": varchar {constraint: unique}
+  "email": varchar {constraint: unique}
+  "password_hash": varchar
+  "display_name": varchar
+  "avatar_url": varchar
+  "status_message": varchar
+  "created_at": timestamp
+  "updated_at": timestamp
+}
 
-    MESSAGES {
-        bigint conversation_id PK
-        bigint message_id PK
-        bigint sender_id
-        text content
-        text type
-        text media_url
-        bigint reply_to_message_id
-        timestamp created_at
-        timestamp deleted_at
-    }
+CONVERSATIONS: {
+  shape: sql_table
+  "id": bigint {constraint: primary_key}
+  "type": varchar
+  "name": varchar
+  "avatar_url": varchar
+  "created_by": bigint {constraint: foreign_key}
+  "created_at": timestamp
+  "updated_at": timestamp
+}
 
-    USER_CONTACTS {
-        bigint user_id PK_FK
-        bigint contact_user_id PK_FK
-        varchar nickname
-        boolean blocked
-        timestamp created_at
-    }
+CONVERSATION_MEMBERS: {
+  shape: sql_table
+  "conversation_id": bigint {constraint: [primary_key; foreign_key]}
+  "user_id": bigint {constraint: [primary_key; foreign_key]}
+  "role": varchar
+  "joined_at": timestamp
+  "last_read_message_id": bigint
+  "muted_until": timestamp
+  "notifications_enabled": boolean
+}
 
-    DEVICE_TOKENS {
-        bigint id PK
-        bigint user_id FK
-        varchar platform
-        varchar token
-        boolean active
-        timestamp created_at
-    }
+MESSAGES: {
+  shape: sql_table
+  "conversation_id": bigint {constraint: primary_key}
+  "message_id": bigint {constraint: primary_key}
+  "sender_id": bigint
+  "content": text
+  "type": text
+  "media_url": text
+  "reply_to_message_id": bigint
+  "created_at": timestamp
+  "deleted_at": timestamp
+}
 
-    USERS ||--o{ CONVERSATIONS : "creates"
-    USERS ||--o{ CONVERSATION_MEMBERS : "joins"
-    CONVERSATIONS ||--o{ CONVERSATION_MEMBERS : "has members"
-    CONVERSATIONS ||--o{ MESSAGES : "contains"
-    USERS ||--o{ MESSAGES : "sends"
-    USERS ||--o{ USER_CONTACTS : "has contacts"
-    USERS ||--o{ DEVICE_TOKENS : "has devices"
+USER_CONTACTS: {
+  shape: sql_table
+  "user_id": bigint {constraint: [primary_key; foreign_key]}
+  "contact_user_id": bigint {constraint: [primary_key; foreign_key]}
+  "nickname": varchar
+  "blocked": boolean
+  "created_at": timestamp
+}
+
+DEVICE_TOKENS: {
+  shape: sql_table
+  "id": bigint {constraint: primary_key}
+  "user_id": bigint {constraint: foreign_key}
+  "platform": varchar
+  "token": varchar
+  "active": boolean
+  "created_at": timestamp
+}
+
+USERS."id" <-> CONVERSATIONS."created_by": "creates" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."id" <-> CONVERSATION_MEMBERS."user_id": "joins" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+CONVERSATIONS."id" <-> CONVERSATION_MEMBERS."conversation_id": "has members" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+CONVERSATIONS."id" <-> MESSAGES."conversation_id": "contains" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."id" <-> MESSAGES."sender_id": "sends" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."id" <-> USER_CONTACTS."user_id": "has contacts" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
+USERS."id" <-> DEVICE_TOKENS."user_id": "has devices" {
+  source-arrowhead: "1" {shape: cf-one-required}
+  target-arrowhead: "0..N" {shape: cf-many}
+}
 ```
 
 ### Indexing Strategy
