@@ -76,10 +76,12 @@ for (const slug of designs) {
       const source = attribute(node, 'source');
       const frames = [...source.matchAll(/^\s*(?:group_\d+|atomic): "[^"\n]+" \{$/gm)].length;
       if (!frames) continue;
-      assert.equal((source.match(/fill: transparent/g) ?? []).length, frames, 'no stacked opaque group backgrounds');
-      for (const theme of ['lightSvg', 'darkSvg']) {
+      assert.doesNotMatch(source, /fill: transparent|stroke: "#64748b"|stroke-width: 2/, 'use package frame defaults, not per-page copies');
+      for (const [theme, color] of [['lightSvg', '#64748b'], ['darkSvg', '#94a3b8']]) {
         const svg = attribute(node, theme);
-        const borders = svg.match(/<(?:rect|path)\b[^>]*stroke="#64748b"[^>]*fill="transparent"[^>]*style="[^"]*stroke-width:2;/g) ?? [];
+        assert.match(svg, /data-d2-sequence="true"/);
+        assert.match(svg, /mix-blend-mode:normal;opacity:1/);
+        const borders = svg.match(new RegExp(`<(?:rect|path)\\b[^>]*stroke="${color}"[^>]*fill="transparent"[^>]*style="[^"]*stroke-width:2;`, 'g')) ?? [];
         assert.equal(borders.length, frames, `${slug}: every frame needs an actual SVG border in ${theme}`);
       }
     }

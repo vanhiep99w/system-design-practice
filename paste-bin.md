@@ -410,25 +410,14 @@ U -> CDN: "GET /p/{shortCode}"
 CDN -> CDN: "Check cache"
 
 group_1: "alt — chỉ chọn một nhánh" {
-  style: {
-    fill: transparent
-    stroke: "#64748b"
-    stroke-width: 2
-  }
   group_2: "if: CDN cache hit" {
     style: {
-      fill: transparent
-      stroke: "#64748b"
-      stroke-width: 2
       stroke-dash: 4
     }
     CDN -> U: "200 OK (cached HTML)" {style.stroke-dash: 4}
   }
   group_3: "else: CDN cache miss" {
     style: {
-      fill: transparent
-      stroke: "#64748b"
-      stroke-width: 2
       stroke-dash: 4
     }
     CDN -> GW: "Forward request"
@@ -436,41 +425,22 @@ group_1: "alt — chỉ chọn một nhánh" {
 
     RS -> CACHE: "GET paste:{shortCode}"
     group_4: "alt — chỉ chọn một nhánh" {
-      style: {
-        fill: transparent
-        stroke: "#64748b"
-        stroke-width: 2
-      }
       group_5: "if: Cache hit" {
         style: {
-          fill: transparent
-          stroke: "#64748b"
-          stroke-width: 2
           stroke-dash: 4
         }
         CACHE -> RS: "metadata + content" {style.stroke-dash: 4}
       }
       group_6: "else: Cache miss" {
         style: {
-          fill: transparent
-          stroke: "#64748b"
-          stroke-width: 2
           stroke-dash: 4
         }
         RS -> DB: "SELECT * FROM paste_metadata WHERE\nshort_code = ?"
         DB -> RS: "metadata" {style.stroke-dash: 4}
 
         group_7: "alt — chỉ chọn một nhánh" {
-          style: {
-            fill: transparent
-            stroke: "#64748b"
-            stroke-width: 2
-          }
           group_8: "if: Paste not found" {
             style: {
-              fill: transparent
-              stroke: "#64748b"
-              stroke-width: 2
               stroke-dash: 4
             }
             RS -> GW: "404 Not Found" {style.stroke-dash: 4}
@@ -479,9 +449,6 @@ group_1: "alt — chỉ chọn một nhánh" {
           }
           group_9: "else: Paste expired" {
             style: {
-              fill: transparent
-              stroke: "#64748b"
-              stroke-width: 2
               stroke-dash: 4
             }
             RS -> GW: "410 Gone" {style.stroke-dash: 4}
@@ -490,9 +457,6 @@ group_1: "alt — chỉ chọn một nhánh" {
           }
           group_10: "else: Paste found" {
             style: {
-              fill: transparent
-              stroke: "#64748b"
-              stroke-width: 2
               stroke-dash: 4
             }
             RS -> RS: "Check visibility (private →\nrequire auth)"
