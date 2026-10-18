@@ -78,7 +78,7 @@ test('paste-bin: D2 sequences preserve ordered messages, responses and burn-afte
   const content = await readFile(join(root, 'paste-bin.md'), 'utf8');
   const sequences = fences(content).filter(m => /^d2\b/.test(m[1]) && /^shape: sequence_diagram$/m.test(m[2]));
   assert.equal(sequences.length, 3);
-  const [create, , burn] = sequences.map(m => m[2]);
+  const [create, , burn] = sequences.map(m => m[2].replace(/\\n/g, ' '));
   const ordered = (source, messages) => {
     let position = -1;
     for (const message of messages) {
@@ -124,7 +124,7 @@ test('all migrated sequences retain message counts, dashed responses, branches, 
     const sequences = fences(content).filter(m => /^d2\b/.test(m[1]) && /^shape: sequence_diagram$/m.test(m[2]));
     assert.equal(sequences.length, slug === 'rate-limiter' ? 3 : expected.length);
     for (const [i, [messages, responses, labels]] of expected.entries()) {
-      const source = sequences[i][2];
+      const source = sequences[i][2].replace(/\\n/g, ' ');
       assert.equal((source.match(/^\s*\w+ -> \w+:/gm) ?? []).length, messages, `${slug} flow ${i + 1}: messages`);
       assert.equal((source.match(/style.stroke-dash: 4/g) ?? []).length, responses, `${slug} flow ${i + 1}: responses/events`);
       for (const label of labels) assert.ok(source.includes(label), `${slug}: missing ${label}`);

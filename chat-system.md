@@ -646,6 +646,7 @@ Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là respon
 ### Flow 1: Gửi tin nhắn 1-1 (Send Direct Message)
 
 ```d2 interactive title="chat-system — Flow 1: Gửi tin nhắn 1-1 (Send Direct Message)"
+# viewport-height: 100vh
 shape: sequence_diagram
 A: "User A (Sender)"
 WS1: "WS Gateway #1"
@@ -659,27 +660,27 @@ WS2: "WS Gateway #2"
 B: "User B (Recipient)"
 NS: "Notification Service"
 
-A -> WS1: "send_message {to: B, content: \"Hello!\", client_msg_id: \"uuid-1\"}"
+A -> WS1: "send_message {to: B, content:\n\"Hello!\", client_msg_id: \"uuid-1\"}"
 WS1 -> CS: "processMessage(msg) [gRPC]"
 CS -> R: "SETNX dedup:uuid-1 EX 300"
 R -> CS: "OK (not duplicate)" {style.stroke-dash: 4}
-CS -> DB: "INSERT INTO messages (conv_id, msg_id, sender, content, ...)"
+CS -> DB: "INSERT INTO messages (conv_id,\nmsg_id, sender, content, ...)"
 DB -> CS: "ACK" {style.stroke-dash: 4}
 CS -> K: "publish topic=message.sent {msg}"
-CS -> WS1: "ACK {message_id: 7185492039184713770, status: SENT}" {style.stroke-dash: 4}
-WS1 -> A: "message_ack {message_id, status: SENT}" {style.stroke-dash: 4}
+CS -> WS1: "ACK {message_id:\n7185492039184713770, status: SENT}" {style.stroke-dash: 4}
+WS1 -> A: "message_ack {message_id, status:\nSENT}" {style.stroke-dash: 4}
 
 CS -> R: "GET user:session:B"
-R -> CS: "{serverId: ws-gateway-2, connectionId: conn-456}" {style.stroke-dash: 4}
+R -> CS: "{serverId: ws-gateway-2,\nconnectionId: conn-456}" {style.stroke-dash: 4}
 
 group_1: "alt — chỉ chọn một nhánh" {
   group_2: "if: User B online" {
     CS -> WS2: "deliverMessage(msg) [gRPC]"
-    WS2 -> B: "new_message {from: A, content: \"Hello!\", message_id: ...}"
+    WS2 -> B: "new_message {from: A, content:\n\"Hello!\", message_id: ...}"
     B -> WS2: "delivery_ack" {style.stroke-dash: 4}
     WS2 -> CS: "updateStatus(msg_id, DELIVERED)"
-    CS -> WS1: "status_update {message_id, status: DELIVERED}"
-    WS1 -> A: "message_status {message_id, status: DELIVERED}"
+    CS -> WS1: "status_update {message_id, status:\nDELIVERED}"
+    WS1 -> A: "message_status {message_id,\nstatus: DELIVERED}"
   }
   group_3: "else: User B offline" {
     K -> NS: "consume message.sent"
@@ -712,23 +713,23 @@ R: "Redis Cache" {
 DB: "Cassandra"
 K: "Kafka"
 
-C -> ALB: "GET /api/v1/conversations/{id}/messages?before=<cursor>&limit=20"
+C -> ALB: "GET\n/api/v1/conversations/{id}/messages?before=<cursor>&limit=20"
 ALB -> HS: "forward request"
 
-HS -> R: "GET conv:msgs:{conv_id}:page:{cursor}"
+HS -> R: "GET\nconv:msgs:{conv_id}:page:{cursor}"
 group_1: "alt — chỉ chọn một nhánh" {
   group_2: "if: Cache HIT" {
     R -> HS: "[20 messages]" {style.stroke-dash: 4}
     HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
   }
   group_3: "else: Cache MISS" {
-    HS -> DB: "SELECT * FROM messages WHERE conversation_id = ? AND message_id < ? ORDER BY message_id DESC LIMIT 20"
+    HS -> DB: "SELECT * FROM messages WHERE\nconversation_id = ? AND message_id\n< ? ORDER BY message_id DESC LIMIT\n20"
     DB -> HS: "[20 messages]" {style.stroke-dash: 4}
-    HS -> R: "SET conv:msgs:{conv_id}:page:{cursor} EX 300"
+    HS -> R: "SET\nconv:msgs:{conv_id}:page:{cursor}\nEX 300"
     HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
   }
 }
-HS -> K: "publish message.history_viewed {conversationId, userId, pageSize}"
+HS -> K: "publish message.history_viewed\n{conversationId, userId, pageSize}"
 ```
 
 **Chi tiết**:

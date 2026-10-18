@@ -497,6 +497,7 @@ Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là respon
 ### Flow 1: Rate Limit Check (Critical Path)
 
 ```d2 interactive title="rate-limiter — Flow 1: Rate Limit Check (Critical Path)"
+# viewport-height: 140vh
 shape: sequence_diagram
 C: "Client"
 GW: "API Gateway"
@@ -508,25 +509,25 @@ K: "Kafka"
 SVC: "Backend Service"
 
 C -> GW: "GET /api/v1/products"
-GW -> RL: "check(clientId=\"api-key-123\", endpoint=\"/products\", method=\"GET\")"
+GW -> RL: "check(clientId=\"api-key-123\",\nendpoint=\"/products\",\nmethod=\"GET\")"
 
-RL -> RL: "Evaluate rules (in-memory cache)\nMatch rule: \"free-plan-products\" (Token Bucket: 100 req/min)"
+RL -> RL: "Evaluate rules (in-memory cache)\nMatch rule: \"free-plan-products\"\n(Token Bucket: 100 req/min)"
 
-RL -> R: "EVALSHA <sha1>\nKEY=rl:api-key-123:/products\nARGS=max_tokens=100, refill_rate=1.67/sec, now=0(use Redis TIME)"
-R."EVALSHA dùng SHA1 hash của Lua script đã pre-load (SCRIPT LOAD)"
+RL -> R: "EVALSHA <sha1>\nKEY=rl:api-key-123:/products\nARGS=max_tokens=100,\nrefill_rate=1.67/sec, now=0(use\nRedis TIME)"
+R."EVALSHA dùng SHA1 hash của Lua\nscript đã pre-load (SCRIPT LOAD)"
 
 group_1: "alt — chỉ chọn một nhánh" {
   group_2: "if: Tokens available" {
-    R -> RL: "[1, 57, 1709111460]\n(allowed=1, remaining=57, reset_ts)" {style.stroke-dash: 4}
-    RL -> GW: "ALLOW {remaining=57, limit=100, reset=1709111460}" {style.stroke-dash: 4}
+    R -> RL: "[1, 57, 1709111460]\n(allowed=1, remaining=57,\nreset_ts)" {style.stroke-dash: 4}
+    RL -> GW: "ALLOW {remaining=57, limit=100,\nreset=1709111460}" {style.stroke-dash: 4}
     GW -> SVC: "Forward request"
     SVC -> GW: "200 OK {products}" {style.stroke-dash: 4}
     GW -> C: "200 OK\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 57\nX-RateLimit-Reset: 1709111460" {style.stroke-dash: 4}
   }
   group_3: "else: Bucket empty" {
     R -> RL: "[0, 0, 1709111460]\n(allowed=0, remaining=0, reset_ts)" {style.stroke-dash: 4}
-    RL -> GW: "REJECT {remaining=0, limit=100, reset=1709111460, retryAfter=23}" {style.stroke-dash: 4}
-    RL -> K: "Publish ViolationEvent (async, fire-and-forget)"
+    RL -> GW: "REJECT {remaining=0, limit=100,\nreset=1709111460, retryAfter=23}" {style.stroke-dash: 4}
+    RL -> K: "Publish ViolationEvent (async,\nfire-and-forget)"
     GW -> C: "429 Too Many Requests\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 0\nRetry-After: 23" {style.stroke-dash: 4}
   }
 }
@@ -535,6 +536,7 @@ group_1: "alt — chỉ chọn một nhánh" {
 ### Flow 2: Rule Management (Admin Path)
 
 ```d2 interactive title="rate-limiter — Flow 2: Rule Management (Admin Path)"
+# viewport-height: 110vh
 shape: sequence_diagram
 A: "Admin"
 RS: "Rule Service"
@@ -545,12 +547,12 @@ K: "Kafka"
 GW1: "Gateway Pod 1"
 GW2: "Gateway Pod 2"
 
-A -> RS: "POST /api/v1/rules {name, scope, limits...}"
+A -> RS: "POST /api/v1/rules {name, scope,\nlimits...}"
 RS -> RS: "Validate rule definition"
 RS -> DB: "INSERT INTO rate_limit_rules (...)"
 DB -> RS: "Created (id=42)" {style.stroke-dash: 4}
 
-RS -> K: "Publish RuleChangedEvent\n{type: \"CREATED\", ruleId: 42, payload: {...}}"
+RS -> K: "Publish RuleChangedEvent\n{type: \"CREATED\", ruleId: 42,\npayload: {...}}"
 RS -> A: "201 Created {rule}" {style.stroke-dash: 4}
 
 group_1: "par — các nhánh chạy song song, không theo thứ tự dọc" {
@@ -564,27 +566,28 @@ group_1: "par — các nhánh chạy song song, không theo thứ tự dọc" {
   }
 }
 
-GW1."[GW1,GW2] New rule active within seconds"
+GW1."[GW1,GW2] New rule active within\nseconds"
 ```
 
 ### Flow 3: Token Bucket — Redis Lua Script (Atomic Operation)
 
 ```d2 interactive title="Token Bucket — Redis Lua atomic operation"
+# viewport-height: 180vh
 shape: sequence_diagram
 RL: Rate Limit Library
 R: Redis
 
-RL -> R: "EVALSHA <sha1>\nKEYS[1] = \"rl:client123:/api/products\"\nARGV = [max_tokens=10, refill_rate=2, now=0(use Redis TIME)]"
-R."EVALSHA dùng SHA1 hash của Lua script đã pre-load (SCRIPT LOAD)"
+RL -> R: "EVALSHA <sha1>\nKEYS[1] =\n\"rl:client123:/api/products\"\nARGV = [max_tokens=10,\nrefill_rate=2, now=0(use Redis\nTIME)]"
+R."EVALSHA dùng SHA1 hash của Lua\nscript đã pre-load (SCRIPT LOAD)"
 atomic: "Lua Script (atomic)" {
-  R."1. GET key → {tokens: 3.2, last: 1709110800.000}"
-  R."2. now = redis.TIME(), elapsed = now - last, refill = elapsed * 2"
-  R."3. tokens = min(3.2 + 1.0, 10) = 4.2"
-  R."4. tokens >= 1 → tokens = 3.2, allowed = true"
-  R."5. SET key {tokens: 3.2, last: 1709110800.500}"
-  R."6. EXPIRE key TTL = max_tokens / refill_rate + buffer"
+  R."1. GET key → {tokens: 3.2, last:\n1709110800.000}"
+  R."2. now = redis.TIME(), elapsed =\nnow - last, refill = elapsed * 2"
+  R."3. tokens = min(3.2 + 1.0, 10) =\n4.2"
+  R."4. tokens >= 1 → tokens = 3.2,\nallowed = true"
+  R."5. SET key {tokens: 3.2, last:\n1709110800.500}"
+  R."6. EXPIRE key TTL = max_tokens /\nrefill_rate + buffer"
 }
-R -> RL: "[1, 3, 1709110805]\n(allowed, remaining_floor, reset_ts)" {style.stroke-dash: 4}
+R -> RL: "[1, 3, 1709110805]\n(allowed, remaining_floor,\nreset_ts)" {style.stroke-dash: 4}
 ```
 
 ### Error handling & Edge cases

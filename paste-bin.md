@@ -341,6 +341,7 @@ Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là respon
 Luồng dưới đây đi từ trên xuống; mũi tên nét đứt là response. Publish `PasteCreatedEvent` là async, không chờ consumer xử lý trước khi trả `201 Created`.
 
 ```d2 interactive title="Create Paste — lưu content và metadata"
+# viewport-height: 130vh
 shape: sequence_diagram
 U: "User"
 GW: "API Gateway"
@@ -357,35 +358,36 @@ CACHE: "Redis" {
 }
 K: "Kafka"
 
-U -> GW: "POST /api/v1/pastes {content, language, visibility, expireIn}"
-GW -> GW: "Validate JWT (if present), rate limit check"
+U -> GW: "POST /api/v1/pastes {content,\nlanguage, visibility, expireIn}"
+GW -> GW: "Validate JWT (if present), rate\nlimit check"
 GW -> PS: "Forward request"
 
-PS -> PS: "Validate input (size, content type)"
+PS -> PS: "Validate input (size, content\ntype)"
 PS -> IDG: "Generate Snowflake ID"
 IDG -> PS: "snowflake_id" {style.stroke-dash: 4}
 
 PS -> PS: "Base62 encode → short_code"
 PS -> PS: "gzip compress content"
 
-PS -> S3: "PUT pastes/{short_code} (compressed content)"
+PS -> S3: "PUT pastes/{short_code}\n(compressed content)"
 S3 -> PS: "200 OK" {style.stroke-dash: 4}
 
-PS -> DB: "INSERT paste_metadata (short_code, language, visibility, expire_at, s3_key, user_id)"
+PS -> DB: "INSERT paste_metadata (short_code,\nlanguage, visibility, expire_at,\ns3_key, user_id)"
 DB -> PS: "Created" {style.stroke-dash: 4}
 
-PS -> CACHE: "SET paste:{short_code} (metadata + content, TTL=1h)"
+PS -> CACHE: "SET paste:{short_code} (metadata +\ncontent, TTL=1h)"
 CACHE -> PS: "OK" {style.stroke-dash: 4}
 
 PS -> K: "Publish PasteCreatedEvent (async)"
 
-PS -> GW: "201 Created {shortCode, pasteUrl, rawUrl, expireAt}" {style.stroke-dash: 4}
+PS -> GW: "201 Created {shortCode, pasteUrl,\nrawUrl, expireAt}" {style.stroke-dash: 4}
 GW -> U: "201 Created" {style.stroke-dash: 4}
 ```
 
 ### Flow 2: Read Paste
 
 ```d2 interactive title="paste-bin — Flow 2: Read Paste"
+# viewport-height: 180vh
 shape: sequence_diagram
 U: "User"
 CDN: "CloudFront" {
@@ -421,7 +423,7 @@ group_1: "alt — chỉ chọn một nhánh" {
         CACHE -> RS: "metadata + content" {style.stroke-dash: 4}
       }
       group_6: "else: Cache miss" {
-        RS -> DB: "SELECT * FROM paste_metadata WHERE short_code = ?"
+        RS -> DB: "SELECT * FROM paste_metadata WHERE\nshort_code = ?"
         DB -> RS: "metadata" {style.stroke-dash: 4}
 
         group_7: "alt — chỉ chọn một nhánh" {
@@ -436,7 +438,7 @@ group_1: "alt — chỉ chọn một nhánh" {
             CDN -> U: "410 Gone" {style.stroke-dash: 4}
           }
           group_10: "else: Paste found" {
-            RS -> RS: "Check visibility (private → require auth)"
+            RS -> RS: "Check visibility (private →\nrequire auth)"
             RS -> S3: "GET pastes/{short_code}"
             S3 -> RS: "compressed content" {style.stroke-dash: 4}
             RS -> RS: "gunzip decompress"
@@ -446,10 +448,10 @@ group_1: "alt — chỉ chọn một nhánh" {
       }
     }
 
-    RS -> K: "Publish ViewEvent (async, fire-and-forget)"
-    RS -> GW: "200 OK {metadata, content, language}" {style.stroke-dash: 4}
+    RS -> K: "Publish ViewEvent (async,\nfire-and-forget)"
+    RS -> GW: "200 OK {metadata, content,\nlanguage}" {style.stroke-dash: 4}
     GW -> CDN: "200 OK" {style.stroke-dash: 4}
-    CDN -> CDN: "Cache response (TTL=5min for unlisted)"
+    CDN -> CDN: "Cache response (TTL=5min for\nunlisted)"
     CDN -> U: "200 OK" {style.stroke-dash: 4}
   }
 }
@@ -460,6 +462,7 @@ group_1: "alt — chỉ chọn một nhánh" {
 Read Service lấy content, đánh dấu paste đã burned rồi xóa object và cache trước khi trả response. Lần đọc tiếp theo nhận `410 Gone`.
 
 ```d2 interactive title="Burn After Read — đọc một lần rồi xóa"
+# viewport-height: 100vh
 shape: sequence_diagram
 U: "User"
 GW: "API Gateway"
@@ -477,13 +480,13 @@ CACHE: "Redis" {
 U -> GW: "GET /p/{shortCode}"
 GW -> RS: "Forward"
 
-RS -> DB: "SELECT * FROM paste_metadata WHERE short_code = ? FOR UPDATE"
-DB -> RS: "metadata (burn_after_read = true, read_count = 0)" {style.stroke-dash: 4}
+RS -> DB: "SELECT * FROM paste_metadata WHERE\nshort_code = ? FOR UPDATE"
+DB -> RS: "metadata (burn_after_read = true,\nread_count = 0)" {style.stroke-dash: 4}
 
 RS -> S3: "GET pastes/{short_code}"
 S3 -> RS: "content" {style.stroke-dash: 4}
 
-RS -> DB: "UPDATE paste_metadata SET status = 'BURNED', read_count = 1"
+RS -> DB: "UPDATE paste_metadata SET status =\n'BURNED', read_count = 1"
 RS -> S3: "DELETE pastes/{short_code}"
 RS -> CACHE: "DEL paste:{shortCode}"
 

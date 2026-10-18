@@ -456,6 +456,7 @@ Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là respon
 ### Flow 1: Create Post
 
 ```d2 interactive title="news-feed — Flow 1: Create Post"
+# viewport-height: 140vh
 shape: sequence_diagram
 User: "User"
 Client: "React Client"
@@ -485,45 +486,46 @@ group_1: "alt — chỉ chọn một nhánh" {
   }
 }
 
-Client -> GW: "POST /api/v1/posts {content, mediaKeys[], idempotencyKey}"
+Client -> GW: "POST /api/v1/posts {content,\nmediaKeys[], idempotencyKey}"
 GW -> GW: "Validate JWT, Rate limit check"
 GW -> PS: "Forward request"
 
-PS -> PS: "Validate content (length, banned words)"
+PS -> PS: "Validate content (length, banned\nwords)"
 PS -> PS: "Generate Snowflake ID"
 PS -> DB: "INSERT INTO posts (...)"
 DB -> PS: "OK" {style.stroke-dash: 4}
 
-PS -> R: "SET post:{postId} (cache post details, TTL=24h)"
-PS -> K: "Publish \"post-created\" event {postId, userId, createdAt}"
+PS -> R: "SET post:{postId} (cache post\ndetails, TTL=24h)"
+PS -> K: "Publish \"post-created\" event\n{postId, userId, createdAt}"
 PS -> GW: "201 Created {post}" {style.stroke-dash: 4}
 GW -> Client: "201 Created {post}" {style.stroke-dash: 4}
 
 K."[K,FS] Async processing"
 
 K -> FS: "Consume \"post-created\""
-FS -> FS: "Check: userId is celebrity? (Redis SET lookup)"
+FS -> FS: "Check: userId is celebrity? (Redis\nSET lookup)"
 
 group_3: "alt — chỉ chọn một nhánh" {
   group_4: "if: Normal User (< 10K followers)" {
-    FS -> FS: "Get follower list (from Social Graph cache)"
-    FS -> R: "Pipeline ZADD feed:{followerId} for each follower"
+    FS -> FS: "Get follower list (from Social\nGraph cache)"
+    FS -> R: "Pipeline ZADD feed:{followerId}\nfor each follower"
     R -> FS: "OK" {style.stroke-dash: 4}
   }
   group_5: "else: Celebrity User (≥ 10K followers)" {
-    FS -> R: "ZADD celebrity_posts:{userId} {postId, timestamp}"
+    FS -> R: "ZADD celebrity_posts:{userId}\n{postId, timestamp}"
     R -> FS: "OK" {style.stroke-dash: 4}
   }
 }
 
 K -> NS: "Consume \"post-created\""
-NS -> NS: "Get online followers via WebSocket registry"
-NS -> Client: "Push \"new post\" notification (WebSocket)"
+NS -> NS: "Get online followers via WebSocket\nregistry"
+NS -> Client: "Push \"new post\" notification\n(WebSocket)"
 ```
 
 ### Flow 2: Fetch News Feed
 
 ```d2 interactive title="news-feed — Flow 2: Fetch News Feed"
+# viewport-height: 190vh
 shape: sequence_diagram
 User: "User"
 Client: "React Client"
@@ -538,19 +540,19 @@ DB: "PostgreSQL (Replica)" {
 }
 
 User -> Client: "Mở app / Scroll feed"
-Client -> GW: "GET /api/v1/feed?cursor=xxx&limit=20"
+Client -> GW: "GET\n/api/v1/feed?cursor=xxx&limit=20"
 GW -> GW: "Validate JWT, Rate limit"
 GW -> FS: "Forward request"
 
-FS -> R: "ZREVRANGEBYSCORE feed:{userId} (get post IDs, cursor-based)"
+FS -> R: "ZREVRANGEBYSCORE feed:{userId}\n(get post IDs, cursor-based)"
 
 group_1: "alt — chỉ chọn một nhánh" {
   group_2: "if: Cache HIT" {
-    R -> FS: "List of post IDs (pre-computed feed)" {style.stroke-dash: 4}
+    R -> FS: "List of post IDs (pre-computed\nfeed)" {style.stroke-dash: 4}
   }
   group_3: "else: Cache MISS" {
     R -> FS: "Empty / partial" {style.stroke-dash: 4}
-    FS -> DB: "Query posts from followed users (fallback)"
+    FS -> DB: "Query posts from followed users\n(fallback)"
     DB -> FS: "Post IDs" {style.stroke-dash: 4}
     FS -> R: "Rebuild feed cache (ZADD batch)"
   }
@@ -558,17 +560,17 @@ group_1: "alt — chỉ chọn một nhánh" {
 
 FS."Merge celebrity posts"
 
-FS -> R: "Get celebrity list user follows (SET members)"
+FS -> R: "Get celebrity list user follows\n(SET members)"
 R -> FS: "[celebrity_1, celebrity_2, ...]" {style.stroke-dash: 4}
 
 group_4: "loop — lặp lại cho Each celebrity" {
-  FS -> R: "ZREVRANGEBYSCORE celebrity_posts:{celebId} (recent posts)"
+  FS -> R: "ZREVRANGEBYSCORE\ncelebrity_posts:{celebId} (recent\nposts)"
   R -> FS: "Celebrity post IDs" {style.stroke-dash: 4}
 }
 
-FS -> FS: "Merge normal feed + celebrity posts (dedup)"
+FS -> FS: "Merge normal feed + celebrity\nposts (dedup)"
 
-FS -> R: "MGET post:{id} for all post IDs (batch fetch post details)"
+FS -> R: "MGET post:{id} for all post IDs\n(batch fetch post details)"
 
 group_5: "alt — chỉ chọn một nhánh" {
   group_6: "if: All posts in cache" {
@@ -576,13 +578,13 @@ group_5: "alt — chỉ chọn một nhánh" {
   }
   group_7: "else: Some cache miss" {
     R -> FS: "Partial results" {style.stroke-dash: 4}
-    FS -> DB: "SELECT * FROM posts WHERE id IN (missing IDs)"
+    FS -> DB: "SELECT * FROM posts WHERE id IN\n(missing IDs)"
     DB -> FS: "Missing post details" {style.stroke-dash: 4}
-    FS -> R: "Cache fetched posts (SET post:{id}, TTL=24h)"
+    FS -> R: "Cache fetched posts (SET\npost:{id}, TTL=24h)"
   }
 }
 
-FS -> RS: "Rank posts (recency, engagement, affinity)"
+FS -> RS: "Rank posts (recency, engagement,\naffinity)"
 RS -> FS: "Sorted post list with scores" {style.stroke-dash: 4}
 
 FS -> GW: "200 OK {posts[], nextCursor}" {style.stroke-dash: 4}

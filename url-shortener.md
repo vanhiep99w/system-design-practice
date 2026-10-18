@@ -575,6 +575,7 @@ Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là respon
 
 ### Flow 1: Tạo short URL
 ```d2 interactive title="url-shortener — Flow 1: Tạo short URL"
+# viewport-height: 120vh
 shape: sequence_diagram
 C: "Client"
 G: "API Gateway"
@@ -587,7 +588,7 @@ R: "Redis" {
   icon: ./diagrams/icons/redis.svg
 }
 
-C -> G: "POST /api/v1/urls { longUrl, customAlias? }"
+C -> G: "POST /api/v1/urls { longUrl,\ncustomAlias? }"
 G -> U: "Forward request + JWT claims"
 U -> U: "Validate URL + policy"
 group_1: "alt — chỉ chọn một nhánh" {
@@ -602,7 +603,7 @@ group_1: "alt — chỉ chọn một nhánh" {
   }
 }
 U -> P: "Insert short_url record"
-U -> R: "Cache shortCode -> longUrl (TTL optional)"
+U -> R: "Cache shortCode -> longUrl (TTL\noptional)"
 U -> G: "201 Created + shortUrl" {style.stroke-dash: 4}
 G -> C: "Response" {style.stroke-dash: 4}
 ```
@@ -633,7 +634,7 @@ group_1: "alt — chỉ chọn một nhánh" {
     R -> S: "longUrl" {style.stroke-dash: 4}
   }
   group_3: "else: Cache miss" {
-    S -> P: "SELECT long_url, expires_at, status"
+    S -> P: "SELECT long_url, expires_at,\nstatus"
     P -> S: "row data" {style.stroke-dash: 4}
     S -> R: "SET abc123x -> longUrl"
   }
