@@ -44,11 +44,6 @@
   }
 }
 
-/* Taller diagram overviews; Explore retains its own zoom/pan viewport. */
-.d2-interactive {
-  --d2-preview-max-height: 75vh;
-}
-
 /* Vietnamese text readability */
 .prose {
   line-height: 1.8;
