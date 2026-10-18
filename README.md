@@ -62,7 +62,7 @@ npm run build
 - **Nguồn chuẩn:** sửa 5 bài `.md` ở root. `content/docs/` được sinh lại bởi `prepare-content`, `predev` và `prebuild`; không sửa bản generated.
 - **Static export:** output nằm ở `dist/`, dùng được trên Cloudflare Pages. D2/WASM và syntax highlighting chỉ chạy lúc build, không chạy trong browser.
 - **D2 layout:** mặc định dùng **TALA** cho toàn bộ diagram D2 (`layout: 'tala'` trong `source.config.ts`). Có thể override từng fence bằng `layout=elk` hoặc `layout=dagre`; Mermaid không bị ảnh hưởng.
-- **D2 preview:** từ docs-kit `0.9.2`, preview tương tác tự fit chiều rộng bài và tối đa `65vh`, giữ nguyên tỷ lệ; bấm Explore để zoom/pan đọc chi tiết. Có thể chỉnh giới hạn bằng `--d2-preview-max-height` trong CSS của site; nút Fit trong viewer tính cả hai chiều.
+- **D2 preview:** từ docs-kit `0.9.2`, preview tương tác tự fit chiều rộng bài; site đặt chiều cao tối đa `75vh` trong `src/app/globals.css`, giữ nguyên tỷ lệ; bấm Explore để zoom/pan đọc chi tiết. Có thể chỉnh giới hạn bằng `--d2-preview-max-height` trong CSS của site; nút Fit trong viewer tính cả hai chiều.
 - **D2 cache:** `.next/cache/docs-kit/d2` (đã ignore). Có thể xóa để kiểm tra cold build; cache không phải artifact deploy.
 
 ### 🧩 Component Đang Sử Dụng
