@@ -293,83 +293,91 @@ Trong đó:
 
 ## 4. 🧩 Defining Entities / Components
 
-```mermaid
-flowchart TB
-    subgraph Edge["Edge Layer"]
-        Client["📱 Client\n(React SPA / Mobile App)"]
-        CDN["🌐 CloudFront CDN\n(Media delivery)"]
-        WAF["🛡️ AWS WAF\n(DDoS protection)"]
-    end
+```d2 interactive title="news-feed — Thành phần hệ thống"
+direction: down
 
-    subgraph Gateway["API Gateway Layer"]
-        ALB["⚖️ ALB\n(Load Balancer)"]
-        APIGW["🚪 API Gateway\n(Auth, Rate Limit, Routing)"]
-    end
+Edge: "Edge Layer" {
+}
+Gateway: "API Gateway Layer" {
+}
+Application: "Application Layer (EKS)" {
+}
+Data: "Data Layer" {
+}
+Async: "Async Layer" {
+}
+Observability: "Observability" {
+}
+Edge.Client: "Client\n(React SPA / Mobile App)"
+Edge.CDN: "CloudFront CDN\n(Media delivery)" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+Edge.WAF: "AWS WAF\n(DDoS protection)" {
+  icon: ./diagrams/icons/waf.svg
+}
+Gateway.ALB: "ALB\n(Load Balancer)" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+Gateway.APIGW: "API Gateway\n(Auth, Rate Limit, Routing)"
+Application.PostSvc: "Post Service\n(CRUD posts)"
+Application.FeedSvc: "Feed Service\n(Generate & serve feed)"
+Application.FanoutSvc: "Fan-out Service\n(Distribute posts to feeds)"
+Application.SocialSvc: "Social Graph Service\n(Follow/Unfollow)"
+Application.EngageSvc: "Engagement Service\n(Like/Comment/Share)"
+Application.RankSvc: "Ranking Service\n(Score & rank feed)"
+Application.NotifSvc: "Notification Service\n(Push notifications)"
+Application.MediaSvc: "Media Service\n(Upload coordination)"
+Data.PG_Primary: "PostgreSQL Primary\n(Posts, Users, Follows)" {
+  icon: ./diagrams/icons/postgres.svg
+}
+Data.PG_Replica: "PostgreSQL Replica\n(Read replicas)" {
+  icon: ./diagrams/icons/postgres.svg
+}
+Data.Redis: "Redis Cluster\n(Feed cache, Post cache)" {
+  icon: ./diagrams/icons/redis.svg
+}
+Data.S3: "S3\n(Media storage)" {
+  icon: ./diagrams/icons/s3.svg
+}
+Async.Kafka: "Apache Kafka\n(Event streaming)"
+Observability.Prometheus: "Prometheus + Grafana"
+Observability.ELK: "ELK Stack"
+Observability.Jaeger: "Jaeger (Tracing)"
 
-    subgraph Application["Application Layer (EKS)"]
-        PostSvc["📝 Post Service\n(CRUD posts)"]
-        FeedSvc["📰 Feed Service\n(Generate & serve feed)"]
-        FanoutSvc["📡 Fan-out Service\n(Distribute posts to feeds)"]
-        SocialSvc["👥 Social Graph Service\n(Follow/Unfollow)"]
-        EngageSvc["❤️ Engagement Service\n(Like/Comment/Share)"]
-        RankSvc["📊 Ranking Service\n(Score & rank feed)"]
-        NotifSvc["🔔 Notification Service\n(Push notifications)"]
-        MediaSvc["🖼️ Media Service\n(Upload coordination)"]
-    end
-
-    subgraph Data["Data Layer"]
-        PG_Primary["🐘 PostgreSQL Primary\n(Posts, Users, Follows)"]
-        PG_Replica["🐘 PostgreSQL Replica\n(Read replicas)"]
-        Redis["⚡ Redis Cluster\n(Feed cache, Post cache)"]
-        S3["📦 S3\n(Media storage)"]
-    end
-
-    subgraph Async["Async Layer"]
-        Kafka["📨 Apache Kafka\n(Event streaming)"]
-    end
-
-    subgraph Observability["Observability"]
-        Prometheus["📈 Prometheus + Grafana"]
-        ELK["📋 ELK Stack"]
-        Jaeger["🔍 Jaeger (Tracing)"]
-    end
-
-    Client --> CDN
-    Client --> WAF --> ALB --> APIGW
-    APIGW --> PostSvc
-    APIGW --> FeedSvc
-    APIGW --> SocialSvc
-    APIGW --> EngageSvc
-    APIGW --> MediaSvc
-
-    PostSvc --> PG_Primary
-    PostSvc --> Kafka
-    FeedSvc --> Redis
-    FeedSvc --> PG_Replica
-    FeedSvc --> RankSvc
-    FanoutSvc --> Redis
-    FanoutSvc --> SocialSvc
-    SocialSvc --> PG_Primary
-    SocialSvc --> Redis
-    EngageSvc --> PG_Primary
-    EngageSvc --> Redis
-    EngageSvc --> Kafka
-    MediaSvc --> S3
-    NotifSvc --> Client
-
-    Kafka --> FanoutSvc
-    Kafka --> NotifSvc
-    Kafka --> EngageSvc
-
-    PG_Primary --> PG_Replica
-
-    PostSvc -.-> Prometheus
-    FeedSvc -.-> Prometheus
-    FanoutSvc -.-> Prometheus
-    PostSvc -.-> ELK
-    FeedSvc -.-> ELK
-    PostSvc -.-> Jaeger
-    FeedSvc -.-> Jaeger
+Edge.Client -> Edge.CDN
+Edge.Client -> Edge.WAF
+Edge.WAF -> Gateway.ALB
+Gateway.ALB -> Gateway.APIGW
+Gateway.APIGW -> Application.PostSvc
+Gateway.APIGW -> Application.FeedSvc
+Gateway.APIGW -> Application.SocialSvc
+Gateway.APIGW -> Application.EngageSvc
+Gateway.APIGW -> Application.MediaSvc
+Application.PostSvc -> Data.PG_Primary
+Application.PostSvc -> Async.Kafka
+Application.FeedSvc -> Data.Redis
+Application.FeedSvc -> Data.PG_Replica
+Application.FeedSvc -> Application.RankSvc
+Application.FanoutSvc -> Data.Redis
+Application.FanoutSvc -> Application.SocialSvc
+Application.SocialSvc -> Data.PG_Primary
+Application.SocialSvc -> Data.Redis
+Application.EngageSvc -> Data.PG_Primary
+Application.EngageSvc -> Data.Redis
+Application.EngageSvc -> Async.Kafka
+Application.MediaSvc -> Data.S3
+Application.NotifSvc -> Edge.Client
+Async.Kafka -> Application.FanoutSvc
+Async.Kafka -> Application.NotifSvc
+Async.Kafka -> Application.EngageSvc
+Data.PG_Primary -> Data.PG_Replica
+Application.PostSvc -> Observability.Prometheus {style.stroke-dash: 4}
+Application.FeedSvc -> Observability.Prometheus {style.stroke-dash: 4}
+Application.FanoutSvc -> Observability.Prometheus {style.stroke-dash: 4}
+Application.PostSvc -> Observability.ELK {style.stroke-dash: 4}
+Application.FeedSvc -> Observability.ELK {style.stroke-dash: 4}
+Application.PostSvc -> Observability.Jaeger {style.stroke-dash: 4}
+Application.FeedSvc -> Observability.Jaeger {style.stroke-dash: 4}
 ```
 
 **Bảng mô tả vai trò từng component:**
@@ -597,144 +605,222 @@ sequenceDiagram
 
 ### Request/Response Examples
 
+> 📌 Các cặp dưới đây là transcript **HTTP/2** minh họa, không gửi request thật. Body hiển thị ở dạng đã decode; chức năng copy không tạo wire format hay cURL. Token chỉ là dữ liệu ví dụ.
+
 **Create Post:**
-```http
-POST /api/v1/posts HTTP/2
-Host: api.newsfeed.example.com
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
-
-{
-  "content": "Hôm nay trời đẹp quá! ☀️ Đi cafe với bạn bè cuối tuần.",
-  "media_keys": ["media/2026/03/01/abc123.jpg"],
-  "visibility": "public"
-}
-```
-
-```http
-HTTP/2 201 Created
-Content-Type: application/json
-
-{
-  "id": "1893456789012345678",
-  "user_id": "1893000000000000001",
-  "content": "Hôm nay trời đẹp quá! ☀️ Đi cafe với bạn bè cuối tuần.",
-  "media_urls": [
-    "https://cdn.newsfeed.example.com/media/2026/03/01/abc123_800x600.jpg"
-  ],
-  "visibility": "public",
-  "like_count": 0,
-  "comment_count": 0,
-  "share_count": 0,
-  "created_at": "2026-03-01T10:30:00Z",
-  "author": {
-    "id": "1893000000000000001",
-    "username": "hieptran",
-    "display_name": "Hiep Tran",
-    "avatar_url": "https://cdn.newsfeed.example.com/avatars/hieptran_64x64.jpg"
-  }
-}
+```protocol-exchange
+title: POST /api/v1/posts
+variants:
+  - id: success
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/posts
+      headers:
+        - id: header-1
+          name: Host
+          value: api.newsfeed.example.com
+        - id: header-2
+          name: Content-Type
+          value: application/json
+        - id: header-3
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+        - id: header-4
+          name: Idempotency-Key
+          value: 550e8400-e29b-41d4-a716-446655440000
+      body:
+        kind: json
+        json: |
+          {
+            "content": "Hôm nay trời đẹp quá! ☀️ Đi cafe với bạn bè cuối tuần.",
+            "media_keys": ["media/2026/03/01/abc123.jpg"],
+            "visibility": "public"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "id": "1893456789012345678",
+            "user_id": "1893000000000000001",
+            "content": "Hôm nay trời đẹp quá! ☀️ Đi cafe với bạn bè cuối tuần.",
+            "media_urls": [
+              "https://cdn.newsfeed.example.com/media/2026/03/01/abc123_800x600.jpg"
+            ],
+            "visibility": "public",
+            "like_count": 0,
+            "comment_count": 0,
+            "share_count": 0,
+            "created_at": "2026-03-01T10:30:00Z",
+            "author": {
+              "id": "1893000000000000001",
+              "username": "hieptran",
+              "display_name": "Hiep Tran",
+              "avatar_url": "https://cdn.newsfeed.example.com/avatars/hieptran_64x64.jpg"
+            }
+          }
 ```
 
 **Fetch Feed (Cursor-based pagination):**
-```http
-GET /api/v1/feed?cursor=1893456789012345000&limit=20 HTTP/2
-Host: api.newsfeed.example.com
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-Accept-Encoding: gzip
-```
-
-```http
-HTTP/2 200 OK
-Content-Type: application/json
-Content-Encoding: gzip
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 58
-X-RateLimit-Reset: 1709290800
-
-{
-  "posts": [
-    {
-      "id": "1893456789012345678",
-      "user_id": "1893000000000000042",
-      "content": "Just shipped a new feature! 🚀",
-      "media_urls": [],
-      "visibility": "public",
-      "like_count": 234,
-      "comment_count": 18,
-      "share_count": 5,
-      "is_liked": true,
-      "feed_score": 0.87,
-      "created_at": "2026-03-01T09:15:00Z",
-      "author": {
-        "id": "1893000000000000042",
-        "username": "devfriend",
-        "display_name": "Dev Friend",
-        "avatar_url": "https://cdn.newsfeed.example.com/avatars/devfriend_64x64.jpg"
-      }
-    },
-    {
-      "id": "1893456789012345600",
-      "user_id": "1893000000000000007",
-      "content": "Sunset at Da Nang beach 🌅",
-      "media_urls": [
-        "https://cdn.newsfeed.example.com/media/2026/03/01/sunset_800x600.jpg"
-      ],
-      "visibility": "public",
-      "like_count": 1502,
-      "comment_count": 89,
-      "share_count": 34,
-      "is_liked": false,
-      "feed_score": 0.82,
-      "created_at": "2026-03-01T08:45:00Z",
-      "author": {
-        "id": "1893000000000000007",
-        "username": "traveler_vn",
-        "display_name": "Vietnam Traveler",
-        "avatar_url": "https://cdn.newsfeed.example.com/avatars/traveler_64x64.jpg"
-      }
-    }
-  ],
-  "next_cursor": "1893456789012345599",
-  "has_more": true
-}
+```protocol-exchange
+title: GET /api/v1/feed?cursor=1893456789012345000&limit=20
+variants:
+  - id: success
+    title: 200 OK
+    request:
+      method: GET
+      url: /api/v1/feed?cursor=1893456789012345000&limit=20
+      headers:
+        - id: header-1
+          name: Host
+          value: api.newsfeed.example.com
+        - id: header-2
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+        - id: header-3
+          name: Accept-Encoding
+          value: gzip
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+        - id: header-2
+          name: Content-Encoding
+          value: gzip
+        - id: header-3
+          name: X-RateLimit-Limit
+          value: "60"
+        - id: header-4
+          name: X-RateLimit-Remaining
+          value: "58"
+        - id: header-5
+          name: X-RateLimit-Reset
+          value: "1709290800"
+      body:
+        kind: json
+        json: |
+          {
+            "posts": [
+              {
+                "id": "1893456789012345678",
+                "user_id": "1893000000000000042",
+                "content": "Just shipped a new feature! 🚀",
+                "media_urls": [],
+                "visibility": "public",
+                "like_count": 234,
+                "comment_count": 18,
+                "share_count": 5,
+                "is_liked": true,
+                "feed_score": 0.87,
+                "created_at": "2026-03-01T09:15:00Z",
+                "author": {
+                  "id": "1893000000000000042",
+                  "username": "devfriend",
+                  "display_name": "Dev Friend",
+                  "avatar_url": "https://cdn.newsfeed.example.com/avatars/devfriend_64x64.jpg"
+                }
+              },
+              {
+                "id": "1893456789012345600",
+                "user_id": "1893000000000000007",
+                "content": "Sunset at Da Nang beach 🌅",
+                "media_urls": [
+                  "https://cdn.newsfeed.example.com/media/2026/03/01/sunset_800x600.jpg"
+                ],
+                "visibility": "public",
+                "like_count": 1502,
+                "comment_count": 89,
+                "share_count": 34,
+                "is_liked": false,
+                "feed_score": 0.82,
+                "created_at": "2026-03-01T08:45:00Z",
+                "author": {
+                  "id": "1893000000000000007",
+                  "username": "traveler_vn",
+                  "display_name": "Vietnam Traveler",
+                  "avatar_url": "https://cdn.newsfeed.example.com/avatars/traveler_64x64.jpg"
+                }
+              }
+            ],
+            "next_cursor": "1893456789012345599",
+            "has_more": true
+          }
 ```
 
 **Like Post:**
-```http
-POST /api/v1/posts/1893456789012345678/likes HTTP/2
-Host: api.newsfeed.example.com
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-```
-
-```http
-HTTP/2 201 Created
-Content-Type: application/json
-
-{
-  "post_id": "1893456789012345678",
-  "liked": true,
-  "like_count": 235
-}
+```protocol-exchange
+title: POST /api/v1/posts/1893456789012345678/likes
+variants:
+  - id: success
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/posts/1893456789012345678/likes
+      headers:
+        - id: header-1
+          name: Host
+          value: api.newsfeed.example.com
+        - id: header-2
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "post_id": "1893456789012345678",
+            "liked": true,
+            "like_count": 235
+          }
 ```
 
 **Follow User:**
-```http
-POST /api/v1/users/1893000000000000042/follow HTTP/2
-Host: api.newsfeed.example.com
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-```
-
-```http
-HTTP/2 201 Created
-Content-Type: application/json
-
-{
-  "follower_id": "1893000000000000001",
-  "followee_id": "1893000000000000042",
-  "created_at": "2026-03-01T10:35:00Z"
-}
+```protocol-exchange
+title: POST /api/v1/users/1893000000000000042/follow
+variants:
+  - id: success
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/users/1893000000000000042/follow
+      headers:
+        - id: header-1
+          name: Host
+          value: api.newsfeed.example.com
+        - id: header-2
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "follower_id": "1893000000000000001",
+            "followee_id": "1893000000000000042",
+            "created_at": "2026-03-01T10:35:00Z"
+          }
 ```
 
 ### Error Response Format
@@ -1089,154 +1175,193 @@ SADD celebrity_set "1893000000000000099" "1893000000000000100"
 
 ### Backend Code Example — FeedService (Java / Spring Boot)
 
-```java
-@Service
-@RequiredArgsConstructor
-@Slf4j
-public class FeedService {
+```code-walkthrough
+title: FeedService — đọc luồng xử lý
+language: java
+snapshots:
+  - id: implementation
+    title: FeedService.java
+    code: |
+      @Service
+      @RequiredArgsConstructor
+      @Slf4j
+      public class FeedService {
 
-    private final RedisFeedRepository redisFeedRepo;
-    private final SocialGraphService socialGraphService;
-    private final PostRepository postRepository;
-    private final FeedRankingEngine rankingEngine;
+          private final RedisFeedRepository redisFeedRepo;
+          private final SocialGraphService socialGraphService;
+          private final PostRepository postRepository;
+          private final FeedRankingEngine rankingEngine;
 
-    private static final int DEFAULT_FEED_SIZE = 20;
-    private static final int MAX_CELEBRITY_POSTS = 50;
-    private static final int FEED_CACHE_REBUILD_SIZE = 500;
+          private static final int DEFAULT_FEED_SIZE = 20;
+          private static final int MAX_CELEBRITY_POSTS = 50;
+          private static final int FEED_CACHE_REBUILD_SIZE = 500;
 
-    /**
-     * Lấy personalized feed cho user, hybrid fan-out:
-     * 1. Đọc pre-computed feed từ Redis (normal users' posts)
-     * 2. Pull recent posts từ celebrities mà user follow
-     * 3. Merge + rank + paginate
-     */
-    public FeedResponse getFeed(Long userId, Long cursor, int limit) {
-        limit = Math.min(limit, 50);
+          /**
+           * Lấy personalized feed cho user, hybrid fan-out:
+           * 1. Đọc pre-computed feed từ Redis (normal users' posts)
+           * 2. Pull recent posts từ celebrities mà user follow
+           * 3. Merge + rank + paginate
+           */
+          public FeedResponse getFeed(Long userId, Long cursor, int limit) {
+              limit = Math.min(limit, 50);
 
-        // Step 1: Lấy pre-computed feed từ Redis
-        List<Long> feedPostIds = redisFeedRepo.getFeedPostIds(userId, cursor, limit + MAX_CELEBRITY_POSTS);
+              // Step 1: Lấy pre-computed feed từ Redis
+              List<Long> feedPostIds = redisFeedRepo.getFeedPostIds(userId, cursor, limit + MAX_CELEBRITY_POSTS);
 
-        // Nếu feed cache empty → cold start, rebuild
-        if (feedPostIds.isEmpty()) {
-            feedPostIds = rebuildFeedCache(userId);
-        }
+              // Nếu feed cache empty → cold start, rebuild
+              if (feedPostIds.isEmpty()) {
+                  feedPostIds = rebuildFeedCache(userId);
+              }
 
-        // Step 2: Pull celebrity posts
-        Set<Long> celebrityIds = socialGraphService.getFollowedCelebrities(userId);
-        List<Long> celebrityPostIds = new ArrayList<>();
-        for (Long celebId : celebrityIds) {
-            List<Long> celebPosts = redisFeedRepo.getCelebrityPostIds(celebId, cursor, 10);
-            celebrityPostIds.addAll(celebPosts);
-        }
+              // Step 2: Pull celebrity posts
+              Set<Long> celebrityIds = socialGraphService.getFollowedCelebrities(userId);
+              List<Long> celebrityPostIds = new ArrayList<>();
+              for (Long celebId : celebrityIds) {
+                  List<Long> celebPosts = redisFeedRepo.getCelebrityPostIds(celebId, cursor, 10);
+                  celebrityPostIds.addAll(celebPosts);
+              }
 
-        // Step 3: Merge + dedup
-        Set<Long> allPostIds = new LinkedHashSet<>(feedPostIds);
-        allPostIds.addAll(celebrityPostIds);
+              // Step 3: Merge + dedup
+              Set<Long> allPostIds = new LinkedHashSet<>(feedPostIds);
+              allPostIds.addAll(celebrityPostIds);
 
-        // Step 4: Batch fetch post details (cache-aside: Redis → DB)
-        List<Post> posts = fetchPostDetails(new ArrayList<>(allPostIds));
+              // Step 4: Batch fetch post details (cache-aside: Redis → DB)
+              List<Post> posts = fetchPostDetails(new ArrayList<>(allPostIds));
 
-        // Step 5: Filter deleted/blocked posts
-        posts = posts.stream()
-                .filter(p -> !p.isDeleted())
-                .filter(p -> !isBlockedUser(userId, p.getUserId()))
-                .collect(Collectors.toList());
+              // Step 5: Filter deleted/blocked posts
+              posts = posts.stream()
+                      .filter(p -> !p.isDeleted())
+                      .filter(p -> !isBlockedUser(userId, p.getUserId()))
+                      .collect(Collectors.toList());
 
-        // Step 6: Rank
-        List<RankedPost> rankedPosts = rankingEngine.rank(posts, userId);
+              // Step 6: Rank
+              List<RankedPost> rankedPosts = rankingEngine.rank(posts, userId);
 
-        // Step 7: Paginate
-        List<RankedPost> page = rankedPosts.stream()
-                .limit(limit)
-                .collect(Collectors.toList());
+              // Step 7: Paginate
+              List<RankedPost> page = rankedPosts.stream()
+                      .limit(limit)
+                      .collect(Collectors.toList());
 
-        Long nextCursor = page.isEmpty() ? null :
-                page.get(page.size() - 1).getPost().getPostId();
+              Long nextCursor = page.isEmpty() ? null :
+                      page.get(page.size() - 1).getPost().getPostId();
 
-        return new FeedResponse(
-                page.stream().map(this::toPostDto).collect(Collectors.toList()),
-                nextCursor,
-                rankedPosts.size() > limit
-        );
-    }
+              return new FeedResponse(
+                      page.stream().map(this::toPostDto).collect(Collectors.toList()),
+                      nextCursor,
+                      rankedPosts.size() > limit
+              );
+          }
 
-    /**
-     * Rebuild feed cache cho cold user (cache miss / expired).
-     * Query following list → fetch recent posts → populate Redis sorted set.
-     */
-    private List<Long> rebuildFeedCache(Long userId) {
-        log.info("Rebuilding feed cache for user {}", userId);
+          /**
+           * Rebuild feed cache cho cold user (cache miss / expired).
+           * Query following list → fetch recent posts → populate Redis sorted set.
+           */
+          private List<Long> rebuildFeedCache(Long userId) {
+              log.info("Rebuilding feed cache for user {}", userId);
 
-        List<Long> followingIds = socialGraphService.getFollowingIds(userId);
-        if (followingIds.isEmpty()) {
-            return Collections.emptyList();
-        }
+              List<Long> followingIds = socialGraphService.getFollowingIds(userId);
+              if (followingIds.isEmpty()) {
+                  return Collections.emptyList();
+              }
 
-        // Query recent posts từ followed users (exclude celebrities — handled separately)
-        List<Long> normalFollowingIds = followingIds.stream()
-                .filter(id -> !socialGraphService.isCelebrity(id))
-                .collect(Collectors.toList());
+              // Query recent posts từ followed users (exclude celebrities — handled separately)
+              List<Long> normalFollowingIds = followingIds.stream()
+                      .filter(id -> !socialGraphService.isCelebrity(id))
+                      .collect(Collectors.toList());
 
-        List<Post> recentPosts = postRepository
-                .findRecentPostsByUserIds(normalFollowingIds, FEED_CACHE_REBUILD_SIZE);
+              List<Post> recentPosts = postRepository
+                      .findRecentPostsByUserIds(normalFollowingIds, FEED_CACHE_REBUILD_SIZE);
 
-        // Populate Redis feed cache
-        if (!recentPosts.isEmpty()) {
-            redisFeedRepo.rebuildFeed(userId, recentPosts);
-        }
+              // Populate Redis feed cache
+              if (!recentPosts.isEmpty()) {
+                  redisFeedRepo.rebuildFeed(userId, recentPosts);
+              }
 
-        return recentPosts.stream()
-                .map(Post::getPostId)
-                .collect(Collectors.toList());
-    }
+              return recentPosts.stream()
+                      .map(Post::getPostId)
+                      .collect(Collectors.toList());
+          }
 
-    /**
-     * Batch fetch post details: check Redis cache first, fallback to DB for misses.
-     */
-    private List<Post> fetchPostDetails(List<Long> postIds) {
-        // Multi-get from Redis
-        Map<Long, Post> cached = redisFeedRepo.getPostDetails(postIds);
+          /**
+           * Batch fetch post details: check Redis cache first, fallback to DB for misses.
+           */
+          private List<Post> fetchPostDetails(List<Long> postIds) {
+              // Multi-get from Redis
+              Map<Long, Post> cached = redisFeedRepo.getPostDetails(postIds);
 
-        // Find cache misses
-        List<Long> missIds = postIds.stream()
-                .filter(id -> !cached.containsKey(id))
-                .collect(Collectors.toList());
+              // Find cache misses
+              List<Long> missIds = postIds.stream()
+                      .filter(id -> !cached.containsKey(id))
+                      .collect(Collectors.toList());
 
-        if (!missIds.isEmpty()) {
-            List<Post> fromDb = postRepository.findAllById(missIds);
-            // Populate cache for misses
-            fromDb.forEach(post -> redisFeedRepo.cachePostDetail(post));
-            fromDb.forEach(post -> cached.put(post.getPostId(), post));
-        }
+              if (!missIds.isEmpty()) {
+                  List<Post> fromDb = postRepository.findAllById(missIds);
+                  // Populate cache for misses
+                  fromDb.forEach(post -> redisFeedRepo.cachePostDetail(post));
+                  fromDb.forEach(post -> cached.put(post.getPostId(), post));
+              }
 
-        // Return in original order
-        return postIds.stream()
-                .map(cached::get)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-    }
+              // Return in original order
+              return postIds.stream()
+                      .map(cached::get)
+                      .filter(Objects::nonNull)
+                      .collect(Collectors.toList());
+          }
 
-    private boolean isBlockedUser(Long viewerId, Long authorId) {
-        // Simplified — in production would check block list from cache
-        return false;
-    }
+          private boolean isBlockedUser(Long viewerId, Long authorId) {
+              // Simplified — in production would check block list from cache
+              return false;
+          }
 
-    private PostDto toPostDto(RankedPost rankedPost) {
-        Post post = rankedPost.getPost();
-        return PostDto.builder()
-                .id(post.getPostId().toString())
-                .userId(post.getUserId().toString())
-                .content(post.getContent())
-                .mediaUrls(post.getMediaUrls())
-                .visibility(post.getVisibility())
-                .likeCount(post.getLikeCount())
-                .commentCount(post.getCommentCount())
-                .shareCount(post.getShareCount())
-                .feedScore(rankedPost.getScore())
-                .createdAt(post.getCreatedAt())
-                .build();
-    }
-}
+          private PostDto toPostDto(RankedPost rankedPost) {
+              Post post = rankedPost.getPost();
+              return PostDto.builder()
+                      .id(post.getPostId().toString())
+                      .userId(post.getUserId().toString())
+                      .content(post.getContent())
+                      .mediaUrls(post.getMediaUrls())
+                      .visibility(post.getVisibility())
+                      .likeCount(post.getLikeCount())
+                      .commentCount(post.getCommentCount())
+                      .shareCount(post.getShareCount())
+                      .feedScore(rankedPost.getScore())
+                      .createdAt(post.getCreatedAt())
+                      .build();
+          }
+      }
+steps:
+  - id: cache
+    title: Đọc feed đã fan-out
+    description: Lấy ID từ Redis; cold cache sẽ rebuild từ social graph và các bài gần đây.
+    snapshot: implementation
+    ranges:
+      - - 21
+        - 30
+      - - 75
+        - 98
+  - id: merge
+    title: Pull celebrity rồi merge
+    description: Celebrity được pull tại read-time để tránh fan-out tới hàng triệu follower; LinkedHashSet deduplicate post IDs.
+    snapshot: implementation
+    ranges:
+      - - 32
+        - 45
+  - id: rank
+    title: Filter, rank và paginate
+    description: Loại bài đã xóa hoặc tác giả bị block trước ranking. isBlockedUser ở ví dụ vẫn là stub, production cần policy thật.
+    snapshot: implementation
+    ranges:
+      - - 47
+        - 68
+      - - 127
+        - 130
+  - id: details
+    title: Cache-aside theo batch
+    description: Chỉ batch-fetch DB cho miss IDs và populate cache; cuối cùng trả chi tiết theo thứ tự IDs ban đầu.
+    snapshot: implementation
+    ranges:
+      - - 104
+        - 125
 ```
 
 ### Backend Code Example — FanoutWorker (Kafka Consumer)
@@ -1512,116 +1637,116 @@ export default NewsFeed;
 
 ### Architecture Diagram
 
-```mermaid
-flowchart TB
-    subgraph Internet["🌐 Internet"]
-        Browser["📱 Browser / Mobile App"]
-    end
+```d2 interactive title="news-feed — Kiến trúc triển khai AWS"
+direction: down
 
-    subgraph AWS_Edge["AWS Edge"]
-        R53["Route53\n(DNS)"]
-        CF["CloudFront\n(CDN - Media)"]
-        WAF2["AWS WAF\n(DDoS, Bot)"]
-    end
+Internet: "🌐 Internet" {
+}
+AWS_Edge: "AWS Edge" {
+}
+AWS_VPC: "AWS VPC (ap-southeast-1)" {
+}
+AWS_VPC.Public_Subnet: "Public Subnet" {
+}
+AWS_VPC.EKS: "EKS Cluster" {
+  icon: ./diagrams/icons/eks.svg
+}
+AWS_VPC.EKS.Write_Path: "Write Path" {
+}
+AWS_VPC.EKS.Read_Path: "Read Path" {
+}
+AWS_VPC.EKS.Async_Workers: "Async Workers" {
+}
+AWS_VPC.Data_Layer: "Data Layer" {
+}
+AWS_VPC.Data_Layer.PostgreSQL_Cluster: "PostgreSQL (RDS)" {
+}
+AWS_VPC.Data_Layer.Redis_Cluster2: "Redis Cluster (ElastiCache)" {
+}
+AWS_VPC.Data_Layer.Kafka_Cluster: "MSK (Kafka)" {
+}
+AWS_VPC.Observability2: "Observability" {
+}
+Internet.Browser: "Browser / Mobile App"
+AWS_Edge.R53: "Route53\n(DNS)" {
+  icon: ./diagrams/icons/route53.svg
+}
+AWS_Edge.CF: "CloudFront\n(CDN - Media)" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+AWS_Edge.WAF2: "AWS WAF\n(DDoS, Bot)" {
+  icon: ./diagrams/icons/waf.svg
+}
+AWS_VPC.Public_Subnet.ALB2: "ALB\n(L7 Load Balancer)" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+AWS_VPC.EKS.APIGW2: "API Gateway Pod\n(Auth, Rate Limit)"
+AWS_VPC.EKS.Write_Path.PS2: "Post Service\n(3-10 pods)"
+AWS_VPC.EKS.Write_Path.SS2: "Social Graph Service\n(3-8 pods)"
+AWS_VPC.EKS.Write_Path.ES2: "Engagement Service\n(3-10 pods)"
+AWS_VPC.EKS.Write_Path.MS2: "Media Service\n(2-5 pods)"
+AWS_VPC.EKS.Read_Path.FS2: "Feed Service\n(8-40 pods)"
+AWS_VPC.EKS.Read_Path.RS2: "Ranking Engine\n(co-located)"
+AWS_VPC.EKS.Async_Workers.FW2: "Fan-out Workers\n(10-50 pods)"
+AWS_VPC.EKS.Async_Workers.NW2: "Notification Workers\n(3-10 pods)"
+AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_P: "Primary\n(r6g.2xlarge)"
+AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_R1: "Replica 1\n(Read)"
+AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_R2: "Replica 2\n(Read)"
+AWS_VPC.Data_Layer.Redis_Cluster2.RC1: "Shard 1-10\n(Feed cache)"
+AWS_VPC.Data_Layer.Redis_Cluster2.RC2: "Shard 11-15\n(Post cache)"
+AWS_VPC.Data_Layer.Redis_Cluster2.RC3: "Shard 16-20\n(Social cache)"
+AWS_VPC.Data_Layer.Kafka_Cluster.KT1: "post-created\n(32 partitions)"
+AWS_VPC.Data_Layer.Kafka_Cluster.KT2: "engagement\n(16 partitions)"
+AWS_VPC.Data_Layer.Kafka_Cluster.KT3: "notification\n(8 partitions)"
+AWS_VPC.Data_Layer.S3_2: "S3\n(Media storage)" {
+  icon: ./diagrams/icons/s3.svg
+}
+AWS_VPC.Observability2.CW: "CloudWatch" {
+  icon: ./diagrams/icons/cloudwatch.svg
+}
+AWS_VPC.Observability2.PROM: "Prometheus\n+ Grafana"
+AWS_VPC.Observability2.ELK2: "OpenSearch\n(Logging)"
+AWS_VPC.Observability2.XRAY: "X-Ray / Jaeger\n(Tracing)"
 
-    subgraph AWS_VPC["AWS VPC (ap-southeast-1)"]
-        subgraph Public_Subnet["Public Subnet"]
-            ALB2["ALB\n(L7 Load Balancer)"]
-        end
-
-        subgraph EKS["EKS Cluster"]
-            APIGW2["API Gateway Pod\n(Auth, Rate Limit)"]
-
-            subgraph Write_Path["Write Path"]
-                PS2["Post Service\n(3-10 pods)"]
-                SS2["Social Graph Service\n(3-8 pods)"]
-                ES2["Engagement Service\n(3-10 pods)"]
-                MS2["Media Service\n(2-5 pods)"]
-            end
-
-            subgraph Read_Path["Read Path"]
-                FS2["Feed Service\n(8-40 pods)"]
-                RS2["Ranking Engine\n(co-located)"]
-            end
-
-            subgraph Async_Workers["Async Workers"]
-                FW2["Fan-out Workers\n(10-50 pods)"]
-                NW2["Notification Workers\n(3-10 pods)"]
-            end
-        end
-
-        subgraph Data_Layer["Data Layer"]
-            subgraph PostgreSQL_Cluster["PostgreSQL (RDS)"]
-                PG_P["Primary\n(r6g.2xlarge)"]
-                PG_R1["Replica 1\n(Read)"]
-                PG_R2["Replica 2\n(Read)"]
-            end
-
-            subgraph Redis_Cluster2["Redis Cluster (ElastiCache)"]
-                RC1["Shard 1-10\n(Feed cache)"]
-                RC2["Shard 11-15\n(Post cache)"]
-                RC3["Shard 16-20\n(Social cache)"]
-            end
-
-            subgraph Kafka_Cluster["MSK (Kafka)"]
-                KT1["post-created\n(32 partitions)"]
-                KT2["engagement\n(16 partitions)"]
-                KT3["notification\n(8 partitions)"]
-            end
-
-            S3_2["S3\n(Media storage)"]
-        end
-
-        subgraph Observability2["Observability"]
-            CW["CloudWatch"]
-            PROM["Prometheus\n+ Grafana"]
-            ELK2["OpenSearch\n(Logging)"]
-            XRAY["X-Ray / Jaeger\n(Tracing)"]
-        end
-    end
-
-    Browser --> R53 --> CF
-    Browser --> R53 --> WAF2 --> ALB2
-    CF --> S3_2
-
-    ALB2 --> APIGW2
-    APIGW2 --> PS2
-    APIGW2 --> FS2
-    APIGW2 --> SS2
-    APIGW2 --> ES2
-    APIGW2 --> MS2
-
-    PS2 --> PG_P
-    PS2 --> KT1
-    SS2 --> PG_P
-    SS2 --> RC3
-    ES2 --> PG_P
-    ES2 --> RC2
-    ES2 --> KT2
-    MS2 --> S3_2
-
-    FS2 --> RC1
-    FS2 --> RC2
-    FS2 --> PG_R1
-    FS2 --> RS2
-
-    KT1 --> FW2
-    FW2 --> RC1
-    FW2 --> RC3
-    KT2 --> NW2
-    KT3 --> NW2
-
-    PG_P --> PG_R1
-    PG_P --> PG_R2
-
-    PS2 -.-> PROM
-    FS2 -.-> PROM
-    FW2 -.-> PROM
-    PS2 -.-> ELK2
-    FS2 -.-> ELK2
-    PS2 -.-> XRAY
-    FS2 -.-> XRAY
-    PROM -.-> CW
+Internet.Browser -> AWS_Edge.R53
+AWS_Edge.R53 -> AWS_Edge.CF
+Internet.Browser -> AWS_Edge.R53
+AWS_Edge.R53 -> AWS_Edge.WAF2
+AWS_Edge.WAF2 -> AWS_VPC.Public_Subnet.ALB2
+AWS_Edge.CF -> AWS_VPC.Data_Layer.S3_2
+AWS_VPC.Public_Subnet.ALB2 -> AWS_VPC.EKS.APIGW2
+AWS_VPC.EKS.APIGW2 -> AWS_VPC.EKS.Write_Path.PS2
+AWS_VPC.EKS.APIGW2 -> AWS_VPC.EKS.Read_Path.FS2
+AWS_VPC.EKS.APIGW2 -> AWS_VPC.EKS.Write_Path.SS2
+AWS_VPC.EKS.APIGW2 -> AWS_VPC.EKS.Write_Path.ES2
+AWS_VPC.EKS.APIGW2 -> AWS_VPC.EKS.Write_Path.MS2
+AWS_VPC.EKS.Write_Path.PS2 -> AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_P
+AWS_VPC.EKS.Write_Path.PS2 -> AWS_VPC.Data_Layer.Kafka_Cluster.KT1
+AWS_VPC.EKS.Write_Path.SS2 -> AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_P
+AWS_VPC.EKS.Write_Path.SS2 -> AWS_VPC.Data_Layer.Redis_Cluster2.RC3
+AWS_VPC.EKS.Write_Path.ES2 -> AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_P
+AWS_VPC.EKS.Write_Path.ES2 -> AWS_VPC.Data_Layer.Redis_Cluster2.RC2
+AWS_VPC.EKS.Write_Path.ES2 -> AWS_VPC.Data_Layer.Kafka_Cluster.KT2
+AWS_VPC.EKS.Write_Path.MS2 -> AWS_VPC.Data_Layer.S3_2
+AWS_VPC.EKS.Read_Path.FS2 -> AWS_VPC.Data_Layer.Redis_Cluster2.RC1
+AWS_VPC.EKS.Read_Path.FS2 -> AWS_VPC.Data_Layer.Redis_Cluster2.RC2
+AWS_VPC.EKS.Read_Path.FS2 -> AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_R1
+AWS_VPC.EKS.Read_Path.FS2 -> AWS_VPC.EKS.Read_Path.RS2
+AWS_VPC.Data_Layer.Kafka_Cluster.KT1 -> AWS_VPC.EKS.Async_Workers.FW2
+AWS_VPC.EKS.Async_Workers.FW2 -> AWS_VPC.Data_Layer.Redis_Cluster2.RC1
+AWS_VPC.EKS.Async_Workers.FW2 -> AWS_VPC.Data_Layer.Redis_Cluster2.RC3
+AWS_VPC.Data_Layer.Kafka_Cluster.KT2 -> AWS_VPC.EKS.Async_Workers.NW2
+AWS_VPC.Data_Layer.Kafka_Cluster.KT3 -> AWS_VPC.EKS.Async_Workers.NW2
+AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_P -> AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_R1
+AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_P -> AWS_VPC.Data_Layer.PostgreSQL_Cluster.PG_R2
+AWS_VPC.EKS.Write_Path.PS2 -> AWS_VPC.Observability2.PROM {style.stroke-dash: 4}
+AWS_VPC.EKS.Read_Path.FS2 -> AWS_VPC.Observability2.PROM {style.stroke-dash: 4}
+AWS_VPC.EKS.Async_Workers.FW2 -> AWS_VPC.Observability2.PROM {style.stroke-dash: 4}
+AWS_VPC.EKS.Write_Path.PS2 -> AWS_VPC.Observability2.ELK2 {style.stroke-dash: 4}
+AWS_VPC.EKS.Read_Path.FS2 -> AWS_VPC.Observability2.ELK2 {style.stroke-dash: 4}
+AWS_VPC.EKS.Write_Path.PS2 -> AWS_VPC.Observability2.XRAY {style.stroke-dash: 4}
+AWS_VPC.EKS.Read_Path.FS2 -> AWS_VPC.Observability2.XRAY {style.stroke-dash: 4}
+AWS_VPC.Observability2.PROM -> AWS_VPC.Observability2.CW {style.stroke-dash: 4}
 ```
 
 ### Scaling Strategy

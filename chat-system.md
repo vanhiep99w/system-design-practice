@@ -504,67 +504,79 @@ boolean online = redisTemplate.hasKey("user:status:" + targetUserId);
 
 ### Component Diagram
 
-```mermaid
-flowchart LR
-    subgraph Edge["Edge Layer"]
-        Client["User - Web / Mobile"]
-        CloudFront["CloudFront + WAF"]
-        ALB["ALB - HTTP L7"]
-        NLB["NLB - TCP L4"]
-    end
+```d2 interactive title="chat-system — Thành phần hệ thống"
+direction: right
 
-    subgraph Application["Application Layer"]
-        WSG["WS Gateway"]
-        ChatSvc["Chat Service"]
-        UserSvc["User Service"]
-        GroupSvc["Group Service"]
-        MediaSvc["Media Service"]
-        PresenceSvc["Presence Service"]
-        NotifSvc["Notification Service"]
-    end
+Edge: "Edge Layer" {
+}
+Application: "Application Layer" {
+}
+Data: "Data Layer" {
+}
+Async: "Async Layer" {
+}
+Observability: "Observability Layer" {
+}
+Edge.Client: "User - Web / Mobile"
+Edge.CloudFront: "CloudFront + WAF" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+Edge.ALB: "ALB - HTTP L7" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+Edge.NLB: "NLB - TCP L4" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+Application.WSG: "WS Gateway"
+Application.ChatSvc: "Chat Service"
+Application.UserSvc: "User Service"
+Application.GroupSvc: "Group Service"
+Application.MediaSvc: "Media Service"
+Application.PresenceSvc: "Presence Service"
+Application.NotifSvc: "Notification Service"
+Data.Cassandra: "Cassandra - Messages" {
+  shape: cylinder
+}
+Data.PG: "PostgreSQL - Users, Groups" {
+  shape: cylinder
+  icon: ./diagrams/icons/postgres.svg
+}
+Data.Redis: "Redis - Cache, Presence" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+Data.S3: "S3 - Media" {
+  shape: cylinder
+  icon: ./diagrams/icons/s3.svg
+}
+Async.Kafka: "Kafka - Events" {
+  shape: queue
+}
+Async.SNS: "FCM / APNs"
+Observability.OBS: "Prometheus + Grafana + ELK"
 
-    subgraph Data["Data Layer"]
-        Cassandra[("Cassandra - Messages")]
-        PG[("PostgreSQL - Users, Groups")]
-        Redis[("Redis - Cache, Presence")]
-        S3[("S3 - Media")]
-    end
-
-    subgraph Async["Async Layer"]
-        Kafka[/"Kafka - Events"/]
-        SNS["FCM / APNs"]
-    end
-
-    subgraph Observability["Observability Layer"]
-        OBS["Prometheus + Grafana + ELK"]
-    end
-
-    Client --> CloudFront
-    Client --> NLB
-    CloudFront --> ALB
-    CloudFront --> S3
-
-    NLB --> WSG
-    ALB --> UserSvc
-    ALB --> GroupSvc
-    ALB --> MediaSvc
-
-    WSG -->|gRPC| ChatSvc
-    ChatSvc -->|gRPC push| WSG
-
-    ChatSvc --> Cassandra
-    ChatSvc --> Redis
-    ChatSvc --> Kafka
-    UserSvc --> PG
-    GroupSvc --> PG
-    PresenceSvc --> Redis
-    MediaSvc --> S3
-    Kafka --> NotifSvc
-    NotifSvc --> SNS
-
-    OBS -. monitor .-> WSG
-    OBS -. monitor .-> ChatSvc
-    OBS -. monitor .-> NotifSvc
+Edge.Client -> Edge.CloudFront
+Edge.Client -> Edge.NLB
+Edge.CloudFront -> Edge.ALB
+Edge.CloudFront -> Data.S3
+Edge.NLB -> Application.WSG
+Edge.ALB -> Application.UserSvc
+Edge.ALB -> Application.GroupSvc
+Edge.ALB -> Application.MediaSvc
+Application.WSG -> Application.ChatSvc: "gRPC"
+Application.ChatSvc -> Application.WSG: "gRPC push"
+Application.ChatSvc -> Data.Cassandra
+Application.ChatSvc -> Data.Redis
+Application.ChatSvc -> Async.Kafka
+Application.UserSvc -> Data.PG
+Application.GroupSvc -> Data.PG
+Application.PresenceSvc -> Data.Redis
+Application.MediaSvc -> Data.S3
+Async.Kafka -> Application.NotifSvc
+Application.NotifSvc -> Async.SNS
+Observability.OBS -> Application.WSG: "monitor" {style.stroke-dash: 4}
+Observability.OBS -> Application.ChatSvc: "monitor" {style.stroke-dash: 4}
+Observability.OBS -> Application.NotifSvc: "monitor" {style.stroke-dash: 4}
 ```
 
 ### Bảng vai trò từng component
@@ -773,109 +785,168 @@ sequenceDiagram
 
 ### Request/Response Examples
 
+> 📌 Các cặp dưới đây là transcript **HTTP/1.1** minh họa, không gửi request thật. Body hiển thị ở dạng đã decode; chức năng copy không tạo wire format hay cURL. Token chỉ là dữ liệu ví dụ.
+
 **Tạo group conversation**:
-```http
-POST /api/v1/conversations HTTP/1.1
-Host: api.chat.com
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
-
-{
-  "type": "GROUP",
-  "name": "Team Backend",
-  "memberIds": [1001, 1002, 1003, 1004]
-}
-```
-
-```http
-HTTP/1.1 201 Created
-Content-Type: application/json
-
-{
-  "id": 9001,
-  "type": "GROUP",
-  "name": "Team Backend",
-  "avatarUrl": null,
-  "createdBy": 1000,
-  "members": [
-    {"userId": 1000, "role": "ADMIN", "joinedAt": "2026-03-01T10:00:00Z"},
-    {"userId": 1001, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"},
-    {"userId": 1002, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"},
-    {"userId": 1003, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"},
-    {"userId": 1004, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"}
-  ],
-  "createdAt": "2026-03-01T10:00:00Z",
-  "updatedAt": "2026-03-01T10:00:00Z"
-}
+```protocol-exchange
+title: POST /api/v1/conversations
+variants:
+  - id: success
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/conversations
+      headers:
+        - id: header-1
+          name: Host
+          value: api.chat.com
+        - id: header-2
+          name: Content-Type
+          value: application/json
+        - id: header-3
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+        - id: header-4
+          name: Idempotency-Key
+          value: 550e8400-e29b-41d4-a716-446655440000
+      body:
+        kind: json
+        json: |
+          {
+            "type": "GROUP",
+            "name": "Team Backend",
+            "memberIds": [1001, 1002, 1003, 1004]
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "id": 9001,
+            "type": "GROUP",
+            "name": "Team Backend",
+            "avatarUrl": null,
+            "createdBy": 1000,
+            "members": [
+              {"userId": 1000, "role": "ADMIN", "joinedAt": "2026-03-01T10:00:00Z"},
+              {"userId": 1001, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"},
+              {"userId": 1002, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"},
+              {"userId": 1003, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"},
+              {"userId": 1004, "role": "MEMBER", "joinedAt": "2026-03-01T10:00:00Z"}
+            ],
+            "createdAt": "2026-03-01T10:00:00Z",
+            "updatedAt": "2026-03-01T10:00:00Z"
+          }
 ```
 
 **Lấy lịch sử tin nhắn (cursor-based pagination)**:
-```http
-GET /api/v1/conversations/9001/messages?before=7185492039184713770&limit=20 HTTP/1.1
-Host: api.chat.com
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-```
-
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "messages": [
-    {
-      "messageId": 7185492039184713750,
-      "conversationId": 9001,
-      "senderId": 1002,
-      "senderName": "Nguyen Van B",
-      "content": "PR reviewed, LGTM!",
-      "type": "TEXT",
-      "mediaUrl": null,
-      "replyToMessageId": 7185492039184713740,
-      "status": "READ",
-      "createdAt": "2026-03-01T09:58:30Z"
-    },
-    {
-      "messageId": 7185492039184713740,
-      "conversationId": 9001,
-      "senderId": 1000,
-      "senderName": "Tran Van A",
-      "content": "Mọi người review PR #1234 giúp mình nhé",
-      "type": "TEXT",
-      "mediaUrl": null,
-      "replyToMessageId": null,
-      "status": "READ",
-      "createdAt": "2026-03-01T09:55:00Z"
-    }
-  ],
-  "nextCursor": 7185492039184713730,
-  "hasMore": true
-}
+```protocol-exchange
+title: GET /api/v1/conversations/9001/messages?before=7185492039184713770&limit=20
+variants:
+  - id: success
+    title: 200 OK
+    request:
+      method: GET
+      url: /api/v1/conversations/9001/messages?before=7185492039184713770&limit=20
+      headers:
+        - id: header-1
+          name: Host
+          value: api.chat.com
+        - id: header-2
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "messages": [
+              {
+                "messageId": 7185492039184713750,
+                "conversationId": 9001,
+                "senderId": 1002,
+                "senderName": "Nguyen Van B",
+                "content": "PR reviewed, LGTM!",
+                "type": "TEXT",
+                "mediaUrl": null,
+                "replyToMessageId": 7185492039184713740,
+                "status": "READ",
+                "createdAt": "2026-03-01T09:58:30Z"
+              },
+              {
+                "messageId": 7185492039184713740,
+                "conversationId": 9001,
+                "senderId": 1000,
+                "senderName": "Tran Van A",
+                "content": "Mọi người review PR #1234 giúp mình nhé",
+                "type": "TEXT",
+                "mediaUrl": null,
+                "replyToMessageId": null,
+                "status": "READ",
+                "createdAt": "2026-03-01T09:55:00Z"
+              }
+            ],
+            "nextCursor": 7185492039184713730,
+            "hasMore": true
+          }
 ```
 
 **Đánh dấu đã đọc (read receipt)**:
-```http
-POST /api/v1/conversations/9001/read-receipts HTTP/1.1
-Host: api.chat.com
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-Idempotency-Key: 1d7a8b9c-8f21-4f96-b0ef-88f67911ac2d
-
-{
-  "lastReadMessageId": 7185492039184713780
-}
-```
-
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "conversationId": 9001,
-  "userId": 1000,
-  "lastReadMessageId": 7185492039184713780,
-  "updatedAt": "2026-03-01T10:06:12Z"
-}
+```protocol-exchange
+title: POST /api/v1/conversations/9001/read-receipts
+variants:
+  - id: success
+    title: 200 OK
+    request:
+      method: POST
+      url: /api/v1/conversations/9001/read-receipts
+      headers:
+        - id: header-1
+          name: Host
+          value: api.chat.com
+        - id: header-2
+          name: Content-Type
+          value: application/json
+        - id: header-3
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+        - id: header-4
+          name: Idempotency-Key
+          value: 1d7a8b9c-8f21-4f96-b0ef-88f67911ac2d
+      body:
+        kind: json
+        json: |
+          {
+            "lastReadMessageId": 7185492039184713780
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "conversationId": 9001,
+            "userId": 1000,
+            "lastReadMessageId": 7185492039184713780,
+            "updatedAt": "2026-03-01T10:06:12Z"
+          }
 ```
 
 **WebSocket send message frame**:
@@ -1166,106 +1237,141 @@ erDiagram
 ### Backend Code Example (Java / Spring Boot)
 
 **ChatService.java — Core message processing**:
-```java
-@Service
-@RequiredArgsConstructor
-public class ChatService {
+```code-walkthrough
+title: ChatService — đọc luồng xử lý
+language: java
+snapshots:
+  - id: implementation
+    title: ChatService.java
+    code: |
+      @Service
+      @RequiredArgsConstructor
+      public class ChatService {
 
-    private final CassandraMessageRepository messageRepository;
-    private final MessageDeliveryService deliveryService;
-    private final SnowflakeIdGenerator idGenerator;
-    private final GroupMembershipService membershipService;
-    private final KafkaEventPublisher eventPublisher;
-    private final RedisTemplate<String, String> redisTemplate;
+          private final CassandraMessageRepository messageRepository;
+          private final MessageDeliveryService deliveryService;
+          private final SnowflakeIdGenerator idGenerator;
+          private final GroupMembershipService membershipService;
+          private final KafkaEventPublisher eventPublisher;
+          private final RedisTemplate<String, String> redisTemplate;
 
-    @Value("${chat.dedup.ttl-seconds:300}")
-    private int dedupTtlSeconds;
+          @Value("${chat.dedup.ttl-seconds:300}")
+          private int dedupTtlSeconds;
 
-    public MessageResponse sendMessage(Long senderId, SendMessageRequest request) {
-        // 1. Deduplication check
-        String dedupKey = "dedup:" + request.getClientMessageId();
-        Boolean isNew = redisTemplate.opsForValue()
-                .setIfAbsent(dedupKey, "PENDING", Duration.ofSeconds(dedupTtlSeconds));
-        if (Boolean.FALSE.equals(isNew)) {
-            String existingMessageId = redisTemplate.opsForValue().get(dedupKey);
-            if (existingMessageId != null && !"PENDING".equals(existingMessageId)) {
-                long messageId = Long.parseLong(existingMessageId);
-                return messageRepository.findById(request.getConversationId(), messageId)
-                        .map(this::toResponse)
-                        .orElseThrow(() -> new ConflictException("Duplicate message not found"));
-            }
-            throw new ConflictException("Duplicate message being processed");
-        }
+          public MessageResponse sendMessage(Long senderId, SendMessageRequest request) {
+              // 1. Deduplication check
+              String dedupKey = "dedup:" + request.getClientMessageId();
+              Boolean isNew = redisTemplate.opsForValue()
+                      .setIfAbsent(dedupKey, "PENDING", Duration.ofSeconds(dedupTtlSeconds));
+              if (Boolean.FALSE.equals(isNew)) {
+                  String existingMessageId = redisTemplate.opsForValue().get(dedupKey);
+                  if (existingMessageId != null && !"PENDING".equals(existingMessageId)) {
+                      long messageId = Long.parseLong(existingMessageId);
+                      return messageRepository.findById(request.getConversationId(), messageId)
+                              .map(this::toResponse)
+                              .orElseThrow(() -> new ConflictException("Duplicate message not found"));
+                  }
+                  throw new ConflictException("Duplicate message being processed");
+              }
 
-        // 2. Validate membership
-        if (!membershipService.isMember(request.getConversationId(), senderId)) {
-            throw new ForbiddenException("Not a member of this conversation");
-        }
+              // 2. Validate membership
+              if (!membershipService.isMember(request.getConversationId(), senderId)) {
+                  throw new ForbiddenException("Not a member of this conversation");
+              }
 
-        // 3. Generate Snowflake ID
-        long messageId = idGenerator.nextId();
+              // 3. Generate Snowflake ID
+              long messageId = idGenerator.nextId();
 
-        // 4. Build and persist message
-        Message message = Message.builder()
-                .conversationId(request.getConversationId())
-                .messageId(messageId)
-                .senderId(senderId)
-                .content(request.getContent())
-                .type(request.getType())
-                .mediaUrl(request.getMediaUrl())
-                .replyToMessageId(request.getReplyToMessageId())
-                .createdAt(Instant.now())
-                .build();
+              // 4. Build and persist message
+              Message message = Message.builder()
+                      .conversationId(request.getConversationId())
+                      .messageId(messageId)
+                      .senderId(senderId)
+                      .content(request.getContent())
+                      .type(request.getType())
+                      .mediaUrl(request.getMediaUrl())
+                      .replyToMessageId(request.getReplyToMessageId())
+                      .createdAt(Instant.now())
+                      .build();
 
-        messageRepository.save(message);
-        redisTemplate.opsForValue()
-                .set(dedupKey, String.valueOf(messageId), Duration.ofSeconds(dedupTtlSeconds));
+              messageRepository.save(message);
+              redisTemplate.opsForValue()
+                      .set(dedupKey, String.valueOf(messageId), Duration.ofSeconds(dedupTtlSeconds));
 
-        // 5. Publish event for async processing (notifications, analytics)
-        eventPublisher.publish("message.sent", MessageSentEvent.from(message));
+              // 5. Publish event for async processing (notifications, analytics)
+              eventPublisher.publish("message.sent", MessageSentEvent.from(message));
 
-        // 6. Deliver to online recipients
-        deliveryService.deliverAsync(message);
+              // 6. Deliver to online recipients
+              deliveryService.deliverAsync(message);
 
-        return toResponse(message);
-    }
+              return toResponse(message);
+          }
 
-    public CursorPage<MessageResponse> getHistory(
-            Long userId, Long conversationId, Long beforeCursor, int limit) {
+          public CursorPage<MessageResponse> getHistory(
+                  Long userId, Long conversationId, Long beforeCursor, int limit) {
 
-        if (!membershipService.isMember(conversationId, userId)) {
-            throw new ForbiddenException("Not a member of this conversation");
-        }
+              if (!membershipService.isMember(conversationId, userId)) {
+                  throw new ForbiddenException("Not a member of this conversation");
+              }
 
-        List<Message> messages = messageRepository.findByConversationId(
-                conversationId, beforeCursor, limit + 1);
+              List<Message> messages = messageRepository.findByConversationId(
+                      conversationId, beforeCursor, limit + 1);
 
-        boolean hasMore = messages.size() > limit;
-        if (hasMore) {
-            messages = messages.subList(0, limit);
-        }
+              boolean hasMore = messages.size() > limit;
+              if (hasMore) {
+                  messages = messages.subList(0, limit);
+              }
 
-        Long nextCursor = hasMore ? messages.get(messages.size() - 1).getMessageId() : null;
-        List<MessageResponse> responses = messages.stream()
-                .map(this::toResponse)
-                .toList();
+              Long nextCursor = hasMore ? messages.get(messages.size() - 1).getMessageId() : null;
+              List<MessageResponse> responses = messages.stream()
+                      .map(this::toResponse)
+                      .toList();
 
-        return new CursorPage<>(responses, nextCursor, hasMore);
-    }
+              return new CursorPage<>(responses, nextCursor, hasMore);
+          }
 
-    private MessageResponse toResponse(Message message) {
-        return MessageResponse.builder()
-                .messageId(message.getMessageId())
-                .conversationId(message.getConversationId())
-                .senderId(message.getSenderId())
-                .content(message.getContent())
-                .type(message.getType())
-                .mediaUrl(message.getMediaUrl())
-                .replyToMessageId(message.getReplyToMessageId())
-                .createdAt(message.getCreatedAt())
-                .build();
-    }
-}
+          private MessageResponse toResponse(Message message) {
+              return MessageResponse.builder()
+                      .messageId(message.getMessageId())
+                      .conversationId(message.getConversationId())
+                      .senderId(message.getSenderId())
+                      .content(message.getContent())
+                      .type(message.getType())
+                      .mediaUrl(message.getMediaUrl())
+                      .replyToMessageId(message.getReplyToMessageId())
+                      .createdAt(message.getCreatedAt())
+                      .build();
+          }
+      }
+steps:
+  - id: dedup
+    title: Nhận diện retry từ client
+    description: SET NX giữ clientMessageId trong Redis; bản sao đang PENDING trả conflict, bản đã lưu đọc lại message.
+    snapshot: implementation
+    ranges:
+      - - 15
+        - 29
+  - id: persist
+    title: Kiểm tra quyền và persist
+    description: Kiểm tra membership trước khi sinh Snowflake ID và lưu message vào Cassandra.
+    snapshot: implementation
+    ranges:
+      - - 31
+        - 53
+  - id: async
+    title: Fan-out sau khi lưu
+    description: Publish event và delivery async sau persist. Ví dụ này chưa bảo đảm atomicity giữa DB và Kafka; cần cơ chế recovery khi publish lỗi.
+    snapshot: implementation
+    ranges:
+      - - 55
+        - 61
+  - id: history
+    title: Phân trang lịch sử
+    description: Đọc limit + 1 để xác định hasMore; nextCursor lấy message cuối của trang trả về.
+    snapshot: implementation
+    ranges:
+      - - 64
+        - 85
 ```
 
 **MessageDeliveryService.java — Route messages to recipients**:
@@ -1485,72 +1591,87 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, currentUserI
 
 ### Architecture Diagram
 
-```mermaid
-flowchart TB
-    subgraph Internet
-        Client["Client Apps - Web + Mobile"]
-    end
+```d2 interactive title="chat-system — Kiến trúc triển khai AWS"
+direction: down
 
-    subgraph AWS_Edge["AWS Edge"]
-        Route53["Route 53 - DNS"]
-        CloudFront["CloudFront - Media CDN"]
-        WAF["WAF + Shield"]
-    end
+Internet: "Internet" {
+}
+AWS_Edge: "AWS Edge" {
+}
+AWS_VPC: "AWS VPC - ap-southeast-1" {
+}
+AWS_VPC.EKS: "Amazon EKS Cluster" {
+  icon: ./diagrams/icons/eks.svg
+}
+AWS_VPC.DataStores: "Data Stores" {
+}
+Internet.Client: "Client Apps - Web + Mobile"
+AWS_Edge.Route53: "Route 53 - DNS" {
+  icon: ./diagrams/icons/route53.svg
+}
+AWS_Edge.CloudFront: "CloudFront - Media CDN" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+AWS_Edge.WAF: "WAF + Shield" {
+  icon: ./diagrams/icons/waf.svg
+}
+AWS_VPC.NLB: "NLB - WebSocket TCP L4" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+AWS_VPC.ALB: "ALB - REST API HTTP L7" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+AWS_VPC.EKS.WSG: "WS Gateway - 300 pods C4"
+AWS_VPC.EKS.CS: "Chat Service - 6~30 pods C1"
+AWS_VPC.EKS.US: "User Service - 4 pods"
+AWS_VPC.EKS.GS: "Group Service - 2 pods"
+AWS_VPC.EKS.PS: "Presence Service - 4 pods"
+AWS_VPC.EKS.NS: "Notification Svc - 4 pods"
+AWS_VPC.EKS.MS: "Media Service - 4 pods"
+AWS_VPC.DataStores.Cassandra: "Cassandra 12 nodes - messages C1 C5"
+AWS_VPC.DataStores.RDS: "RDS PostgreSQL Multi-AZ - users, groups" {
+  icon: ./diagrams/icons/rds.svg
+}
+AWS_VPC.DataStores.Redis: "ElastiCache Redis 60GB - C7" {
+  icon: ./diagrams/icons/redis.svg
+}
+AWS_VPC.MSK: "Amazon MSK 6 brokers - Kafka C2" {
+  icon: ./diagrams/icons/msk.svg
+}
+AWS_VPC.S3: "S3 media storage - C6" {
+  icon: ./diagrams/icons/s3.svg
+}
+AWS_VPC.SNS_Push: "SNS - push notifications"
+Prometheus: "Prometheus + Grafana"
+ELK: "ELK Stack"
+XRay: "X-Ray"
 
-    subgraph AWS_VPC["AWS VPC - ap-southeast-1"]
-        NLB["NLB - WebSocket TCP L4"]
-        ALB["ALB - REST API HTTP L7"]
-
-        subgraph EKS["Amazon EKS Cluster"]
-            WSG["WS Gateway - 300 pods C4"]
-            CS["Chat Service - 6~30 pods C1"]
-            US["User Service - 4 pods"]
-            GS["Group Service - 2 pods"]
-            PS["Presence Service - 4 pods"]
-            NS["Notification Svc - 4 pods"]
-            MS["Media Service - 4 pods"]
-        end
-
-        subgraph DataStores["Data Stores"]
-            Cassandra["Cassandra 12 nodes - messages C1 C5"]
-            RDS["RDS PostgreSQL Multi-AZ - users, groups"]
-            Redis["ElastiCache Redis 60GB - C7"]
-        end
-
-        MSK["Amazon MSK 6 brokers - Kafka C2"]
-        S3["S3 media storage - C6"]
-        SNS_Push["SNS - push notifications"]
-    end
-
-    Client --> Route53
-    Route53 --> NLB
-    Route53 --> CloudFront
-    CloudFront --> ALB
-    CloudFront --> S3
-    WAF --> NLB
-    WAF --> ALB
-
-    NLB --> WSG
-    ALB --> US
-    ALB --> GS
-    ALB --> MS
-
-    WSG -->|gRPC| CS
-    CS --> Cassandra
-    CS --> Redis
-    CS --> MSK
-    CS -->|gRPC push| WSG
-    US --> RDS
-    GS --> RDS
-    PS --> Redis
-    MS --> S3
-    MSK --> NS
-    NS --> SNS_Push
-
-    CS -.->|metrics| Prometheus["Prometheus + Grafana"]
-    WSG -.->|metrics| Prometheus
-    CS -.->|logs| ELK["ELK Stack"]
-    CS -.->|traces| XRay["X-Ray"]
+Internet.Client -> AWS_Edge.Route53
+AWS_Edge.Route53 -> AWS_VPC.NLB
+AWS_Edge.Route53 -> AWS_Edge.CloudFront
+AWS_Edge.CloudFront -> AWS_VPC.ALB
+AWS_Edge.CloudFront -> AWS_VPC.S3
+AWS_Edge.WAF -> AWS_VPC.NLB
+AWS_Edge.WAF -> AWS_VPC.ALB
+AWS_VPC.NLB -> AWS_VPC.EKS.WSG
+AWS_VPC.ALB -> AWS_VPC.EKS.US
+AWS_VPC.ALB -> AWS_VPC.EKS.GS
+AWS_VPC.ALB -> AWS_VPC.EKS.MS
+AWS_VPC.EKS.WSG -> AWS_VPC.EKS.CS: "gRPC"
+AWS_VPC.EKS.CS -> AWS_VPC.DataStores.Cassandra
+AWS_VPC.EKS.CS -> AWS_VPC.DataStores.Redis
+AWS_VPC.EKS.CS -> AWS_VPC.MSK
+AWS_VPC.EKS.CS -> AWS_VPC.EKS.WSG: "gRPC push"
+AWS_VPC.EKS.US -> AWS_VPC.DataStores.RDS
+AWS_VPC.EKS.GS -> AWS_VPC.DataStores.RDS
+AWS_VPC.EKS.PS -> AWS_VPC.DataStores.Redis
+AWS_VPC.EKS.MS -> AWS_VPC.S3
+AWS_VPC.MSK -> AWS_VPC.EKS.NS
+AWS_VPC.EKS.NS -> AWS_VPC.SNS_Push
+AWS_VPC.EKS.CS -> Prometheus: "metrics" {style.stroke-dash: 4}
+AWS_VPC.EKS.WSG -> Prometheus: "metrics" {style.stroke-dash: 4}
+AWS_VPC.EKS.CS -> ELK: "logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.CS -> XRay: "traces" {style.stroke-dash: 4}
 ```
 
 ### Scaling Strategy

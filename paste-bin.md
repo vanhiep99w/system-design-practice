@@ -234,46 +234,58 @@ return { meta, gunzip(content) }
 
 ## 4. 🧩 Defining Entities / Components
 
-```mermaid
-flowchart TB
-    subgraph Edge["Edge Layer"]
-        CDN[CloudFront CDN]
-        WAF[AWS WAF]
-    end
+```d2 interactive title="paste-bin — Thành phần hệ thống"
+direction: down
 
-    subgraph Application["Application Layer"]
-        GW[API Gateway]
-        PS[Paste Service]
-        RS[Read Service]
-        US[User Service]
-        CS[Cleanup Service]
-    end
+Edge: "Edge Layer" {
+}
+Application: "Application Layer" {
+}
+Data: "Data Layer" {
+}
+Async: "Async Layer" {
+}
+Edge.CDN: "CloudFront CDN" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+Edge.WAF: "AWS WAF" {
+  icon: ./diagrams/icons/waf.svg
+}
+Application.GW: "API Gateway"
+Application.PS: "Paste Service"
+Application.RS: "Read Service"
+Application.US: "User Service"
+Application.CS: "Cleanup Service"
+Data.DB: "PostgreSQL" {
+  shape: cylinder
+  icon: ./diagrams/icons/postgres.svg
+}
+Data.CACHE: "Redis" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+Data.S3: "S3 Content Store" {
+  shape: cylinder
+  icon: ./diagrams/icons/s3.svg
+}
+Async.KAFKA: "Kafka"
+Async.ANALYTICS: "Analytics Service"
 
-    subgraph Data["Data Layer"]
-        DB[(PostgreSQL)]
-        CACHE[(Redis)]
-        S3[(S3 Content Store)]
-    end
-
-    subgraph Async["Async Layer"]
-        KAFKA[Kafka]
-        ANALYTICS[Analytics Service]
-    end
-
-    CDN --> WAF --> GW
-    GW --> PS
-    GW --> RS
-    GW --> US
-    PS --> DB
-    PS --> S3
-    RS --> CACHE
-    RS --> DB
-    RS --> S3
-    RS --> KAFKA
-    CS --> DB
-    CS --> S3
-    KAFKA --> ANALYTICS
-    ANALYTICS --> DB
+Edge.CDN -> Edge.WAF
+Edge.WAF -> Application.GW
+Application.GW -> Application.PS
+Application.GW -> Application.RS
+Application.GW -> Application.US
+Application.PS -> Data.DB
+Application.PS -> Data.S3
+Application.RS -> Data.CACHE
+Application.RS -> Data.DB
+Application.RS -> Data.S3
+Application.RS -> Async.KAFKA
+Application.CS -> Data.DB
+Application.CS -> Data.S3
+Async.KAFKA -> Async.ANALYTICS
+Async.ANALYTICS -> Data.DB
 ```
 
 | Component | Vai trò |
@@ -473,90 +485,147 @@ sequenceDiagram
 
 ### Request/Response Examples
 
+> 📌 Các cặp dưới đây là transcript **HTTP/1.1** minh họa, không gửi request thật. Body hiển thị ở dạng đã decode; chức năng copy không tạo wire format hay cURL. Token chỉ là dữ liệu ví dụ.
+
 **Create Paste**
-```http
-POST /api/v1/pastes HTTP/1.1
-Host: api.pastebin.example.com
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
-
-{
-  "title": "Quick sort implementation",
-  "content": "def quick_sort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quick_sort(left) + middle + quick_sort(right)",
-  "language": "python",
-  "visibility": "unlisted",
-  "expireIn": "7d",
-  "burnAfterRead": false
-}
-```
-
-```http
-HTTP/1.1 201 Created
-Content-Type: application/json
-Location: https://pastebin.example.com/p/K9xM3bR2w
-
-{
-  "id": "290184726153420800",
-  "shortCode": "K9xM3bR2w",
-  "title": "Quick sort implementation",
-  "language": "python",
-  "visibility": "unlisted",
-  "pasteUrl": "https://pastebin.example.com/p/K9xM3bR2w",
-  "rawUrl": "https://pastebin.example.com/api/v1/pastes/K9xM3bR2w/raw",
-  "contentSize": 312,
-  "createdAt": "2026-02-28T10:30:00Z",
-  "expireAt": "2026-03-07T10:30:00Z",
-  "burnAfterRead": false,
-  "viewCount": 0
-}
+```protocol-exchange
+title: POST /api/v1/pastes
+variants:
+  - id: success
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/pastes
+      headers:
+        - id: header-1
+          name: Host
+          value: api.pastebin.example.com
+        - id: header-2
+          name: Content-Type
+          value: application/json
+        - id: header-3
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+        - id: header-4
+          name: Idempotency-Key
+          value: 550e8400-e29b-41d4-a716-446655440000
+      body:
+        kind: json
+        json: |
+          {
+            "title": "Quick sort implementation",
+            "content": "def quick_sort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quick_sort(left) + middle + quick_sort(right)",
+            "language": "python",
+            "visibility": "unlisted",
+            "expireIn": "7d",
+            "burnAfterRead": false
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+        - id: header-2
+          name: Location
+          value: https://pastebin.example.com/p/K9xM3bR2w
+      body:
+        kind: json
+        json: |
+          {
+            "id": "290184726153420800",
+            "shortCode": "K9xM3bR2w",
+            "title": "Quick sort implementation",
+            "language": "python",
+            "visibility": "unlisted",
+            "pasteUrl": "https://pastebin.example.com/p/K9xM3bR2w",
+            "rawUrl": "https://pastebin.example.com/api/v1/pastes/K9xM3bR2w/raw",
+            "contentSize": 312,
+            "createdAt": "2026-02-28T10:30:00Z",
+            "expireAt": "2026-03-07T10:30:00Z",
+            "burnAfterRead": false,
+            "viewCount": 0
+          }
 ```
 
 **Read Paste**
-```http
-GET /api/v1/pastes/K9xM3bR2w HTTP/1.1
-Host: api.pastebin.example.com
-Accept: application/json
-```
-
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-Cache-Control: public, max-age=300
-
-{
-  "id": "290184726153420800",
-  "shortCode": "K9xM3bR2w",
-  "title": "Quick sort implementation",
-  "language": "python",
-  "visibility": "unlisted",
-  "content": "def quick_sort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quick_sort(left) + middle + quick_sort(right)",
-  "contentSize": 312,
-  "createdAt": "2026-02-28T10:30:00Z",
-  "expireAt": "2026-03-07T10:30:00Z",
-  "viewCount": 42
-}
+```protocol-exchange
+title: GET /api/v1/pastes/K9xM3bR2w
+variants:
+  - id: success
+    title: 200 OK
+    request:
+      method: GET
+      url: /api/v1/pastes/K9xM3bR2w
+      headers:
+        - id: header-1
+          name: Host
+          value: api.pastebin.example.com
+        - id: header-2
+          name: Accept
+          value: application/json
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+        - id: header-2
+          name: Cache-Control
+          value: public, max-age=300
+      body:
+        kind: json
+        json: |
+          {
+            "id": "290184726153420800",
+            "shortCode": "K9xM3bR2w",
+            "title": "Quick sort implementation",
+            "language": "python",
+            "visibility": "unlisted",
+            "content": "def quick_sort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quick_sort(left) + middle + quick_sort(right)",
+            "contentSize": 312,
+            "createdAt": "2026-02-28T10:30:00Z",
+            "expireAt": "2026-03-07T10:30:00Z",
+            "viewCount": 42
+          }
 ```
 
 **Read Raw Content**
-```http
-GET /api/v1/pastes/K9xM3bR2w/raw HTTP/1.1
-Host: api.pastebin.example.com
-```
-
-```http
-HTTP/1.1 200 OK
-Content-Type: text/plain; charset=utf-8
-Cache-Control: public, max-age=300
-
-def quick_sort(arr):
-    if len(arr) <= 1:
-        return arr
-    pivot = arr[len(arr) // 2]
-    left = [x for x in arr if x < pivot]
-    middle = [x for x in arr if x == pivot]
-    right = [x for x in arr if x > pivot]
-    return quick_sort(left) + middle + quick_sort(right)
+```protocol-exchange
+title: GET /api/v1/pastes/K9xM3bR2w/raw
+variants:
+  - id: success
+    title: 200 OK
+    request:
+      method: GET
+      url: /api/v1/pastes/K9xM3bR2w/raw
+      headers:
+        - id: header-1
+          name: Host
+          value: api.pastebin.example.com
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: text/plain; charset=utf-8
+        - id: header-2
+          name: Cache-Control
+          value: public, max-age=300
+      body:
+        kind: text
+        text: |
+          def quick_sort(arr):
+              if len(arr) <= 1:
+                  return arr
+              pivot = arr[len(arr) // 2]
+              left = [x for x in arr if x < pivot]
+              middle = [x for x in arr if x == pivot]
+              right = [x for x in arr if x > pivot]
+              return quick_sort(left) + middle + quick_sort(right)
 ```
 
 **Error Response**
@@ -728,67 +797,97 @@ erDiagram
 
 ### Backend Code Example (Java / Spring Boot)
 
-```java
-@Service
-public class PasteCreationService {
+```code-walkthrough
+title: PasteCreationService — đọc luồng xử lý
+language: java
+snapshots:
+  - id: implementation
+    title: PasteCreationService.java
+    code: |
+      @Service
+      public class PasteCreationService {
 
-    private final PasteMetadataRepository metadataRepository;
-    private final ContentStorageService contentStorage;
-    private final IdGeneratorClient idGenerator;
-    private final CacheService cacheService;
+          private final PasteMetadataRepository metadataRepository;
+          private final ContentStorageService contentStorage;
+          private final IdGeneratorClient idGenerator;
+          private final CacheService cacheService;
 
-    public PasteCreationService(PasteMetadataRepository metadataRepository,
-                                 ContentStorageService contentStorage,
-                                 IdGeneratorClient idGenerator,
-                                 CacheService cacheService) {
-        this.metadataRepository = metadataRepository;
-        this.contentStorage = contentStorage;
-        this.idGenerator = idGenerator;
-        this.cacheService = cacheService;
-    }
+          public PasteCreationService(PasteMetadataRepository metadataRepository,
+                                       ContentStorageService contentStorage,
+                                       IdGeneratorClient idGenerator,
+                                       CacheService cacheService) {
+              this.metadataRepository = metadataRepository;
+              this.contentStorage = contentStorage;
+              this.idGenerator = idGenerator;
+              this.cacheService = cacheService;
+          }
 
-    @Transactional
-    public PasteResponse create(CreatePasteRequest req, Long userId) {
-        validateContent(req.content(), req.language());
+          @Transactional
+          public PasteResponse create(CreatePasteRequest req, Long userId) {
+              validateContent(req.content(), req.language());
 
-        long snowflakeId = idGenerator.nextId();
-        String shortCode = Base62.encode(snowflakeId);
-        String s3Key = "pastes/" + shortCode;
+              long snowflakeId = idGenerator.nextId();
+              String shortCode = Base62.encode(snowflakeId);
+              String s3Key = "pastes/" + shortCode;
 
-        contentStorage.upload(s3Key, req.content());
+              contentStorage.upload(s3Key, req.content());
 
-        Instant expireAt = req.expireIn() != null
-                ? Instant.now().plus(parseDuration(req.expireIn()))
-                : null;
+              Instant expireAt = req.expireIn() != null
+                      ? Instant.now().plus(parseDuration(req.expireIn()))
+                      : null;
 
-        PasteMetadata metadata = PasteMetadata.builder()
-                .id(snowflakeId)
-                .shortCode(shortCode)
-                .title(req.title())
-                .language(req.language())
-                .visibility(req.visibility())
-                .s3Key(s3Key)
-                .contentSize(req.content().length())
-                .userId(userId)
-                .burnAfterRead(req.burnAfterRead())
-                .expireAt(expireAt)
-                .build();
+              PasteMetadata metadata = PasteMetadata.builder()
+                      .id(snowflakeId)
+                      .shortCode(shortCode)
+                      .title(req.title())
+                      .language(req.language())
+                      .visibility(req.visibility())
+                      .s3Key(s3Key)
+                      .contentSize(req.content().length())
+                      .userId(userId)
+                      .burnAfterRead(req.burnAfterRead())
+                      .expireAt(expireAt)
+                      .build();
 
-        metadataRepository.save(metadata);
-        cacheService.cachePaste(shortCode, metadata, req.content());
+              metadataRepository.save(metadata);
+              cacheService.cachePaste(shortCode, metadata, req.content());
 
-        return PasteResponse.from(metadata);
-    }
+              return PasteResponse.from(metadata);
+          }
 
-    private void validateContent(String content, String language) {
-        if (content == null || content.isBlank()) {
-            throw new BadRequestException("CONTENT_REQUIRED");
-        }
-        if (content.length() > 10_485_760) { // 10MB
-            throw new PayloadTooLargeException("CONTENT_TOO_LARGE");
-        }
-    }
-}
+          private void validateContent(String content, String language) {
+              if (content == null || content.isBlank()) {
+                  throw new BadRequestException("CONTENT_REQUIRED");
+              }
+              if (content.length() > 10_485_760) { // 10MB
+                  throw new PayloadTooLargeException("CONTENT_TOO_LARGE");
+              }
+          }
+      }
+steps:
+  - id: deps
+    title: Tách metadata và content
+    description: PostgreSQL lưu metadata, S3 lưu nội dung; các client được inject qua constructor.
+    snapshot: implementation
+    ranges:
+      - - 1
+        - 17
+  - id: content
+    title: Validate, sinh ID, upload S3
+    description: "Validate trước khi upload. Transaction DB không bao phủ S3: upload thành công rồi DB lỗi cần cleanup object mồ côi."
+    snapshot: implementation
+    ranges:
+      - - 19
+        - 31
+      - - 52
+        - 59
+  - id: metadata
+    title: Lưu metadata và warm cache
+    description: Metadata tham chiếu s3Key. Cache là bản sao để tăng tốc, không phải nguồn dữ liệu chính.
+    snapshot: implementation
+    ranges:
+      - - 33
+        - 49
 ```
 
 ```java
@@ -975,61 +1074,90 @@ export function CreatePasteForm() {
 - Deployment trên **AWS EKS** multi-AZ, tách node group cho read-heavy workload.
 - RDS PostgreSQL Multi-AZ cho metadata, S3 cho content, ElastiCache Redis cho caching.
 
-```mermaid
-flowchart TB
-    subgraph Internet
-        C[Client/Browsers]
-    end
+```d2 interactive title="paste-bin — Kiến trúc triển khai AWS"
+direction: down
 
-    subgraph AWS_Edge
-        R53[Route53]
-        CF[CloudFront]
-        WAF[AWS WAF]
-    end
+Internet: "Internet" {
+}
+AWS_Edge: "AWS Edge" {
+}
+AWS_VPC: "AWS VPC" {
+}
+AWS_VPC.EKS: "EKS" {
+  icon: ./diagrams/icons/eks.svg
+}
+Internet.C: "Client/Browsers"
+AWS_Edge.R53: "Route53" {
+  icon: ./diagrams/icons/route53.svg
+}
+AWS_Edge.CF: "CloudFront" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+AWS_Edge.WAF: "AWS WAF" {
+  icon: ./diagrams/icons/waf.svg
+}
+AWS_VPC.ALB: "Application Load Balancer" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+AWS_VPC.EKS.GW: "Gateway Pods"
+AWS_VPC.EKS.PS: "Paste Service Pods"
+AWS_VPC.EKS.RS: "Read Service Pods"
+AWS_VPC.EKS.US: "User Service Pods"
+AWS_VPC.EKS.AS: "Analytics Service Pods"
+AWS_VPC.EKS.CJ: "Cleanup CronJob Pods"
+AWS_VPC.REDIS: "ElastiCache Redis" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+AWS_VPC.RDS: "RDS PostgreSQL Multi-AZ" {
+  shape: cylinder
+  icon: ./diagrams/icons/rds.svg
+}
+AWS_VPC.RR: "RDS Read Replicas" {
+  shape: cylinder
+  icon: ./diagrams/icons/rds.svg
+}
+AWS_VPC.MSK: "Amazon MSK / Kafka" {
+  shape: cylinder
+  icon: ./diagrams/icons/msk.svg
+}
+AWS_VPC.S3: "S3 Content Store" {
+  shape: cylinder
+  icon: ./diagrams/icons/s3.svg
+}
+AWS_VPC.S3G: "S3 Glacier Archive" {
+  shape: cylinder
+  icon: ./diagrams/icons/s3.svg
+}
+AWS_VPC.CW: "CloudWatch" {
+  icon: ./diagrams/icons/cloudwatch.svg
+}
+AWS_VPC.AMG: "Managed Prometheus/Grafana"
 
-    subgraph AWS_VPC
-        ALB[Application Load Balancer]
-
-        subgraph EKS
-            GW[Gateway Pods]
-            PS[Paste Service Pods]
-            RS[Read Service Pods]
-            US[User Service Pods]
-            AS[Analytics Service Pods]
-            CJ[Cleanup CronJob Pods]
-        end
-
-        REDIS[(ElastiCache Redis)]
-        RDS[(RDS PostgreSQL Multi-AZ)]
-        RR[(RDS Read Replicas)]
-        MSK[(Amazon MSK / Kafka)]
-        S3[(S3 Content Store)]
-        S3G[(S3 Glacier Archive)]
-        CW[CloudWatch]
-        AMG[Managed Prometheus/Grafana]
-    end
-
-    C --> R53 --> CF --> WAF --> ALB --> GW
-    GW --> PS
-    GW --> RS
-    GW --> US
-    PS --> S3
-    PS --> RDS
-    RS --> REDIS
-    RS --> RDS
-    RS --> S3
-    RS --> MSK
-    AS --> MSK
-    AS --> RDS
-    CJ --> RDS
-    CJ --> S3
-    RDS --> RR
-    S3 -.lifecycle.-> S3G
-
-    GW -.metrics/logs.-> CW
-    PS -.metrics/logs.-> AMG
-    RS -.metrics/logs.-> AMG
-    AS -.metrics/logs.-> AMG
+Internet.C -> AWS_Edge.R53
+AWS_Edge.R53 -> AWS_Edge.CF
+AWS_Edge.CF -> AWS_Edge.WAF
+AWS_Edge.WAF -> AWS_VPC.ALB
+AWS_VPC.ALB -> AWS_VPC.EKS.GW
+AWS_VPC.EKS.GW -> AWS_VPC.EKS.PS
+AWS_VPC.EKS.GW -> AWS_VPC.EKS.RS
+AWS_VPC.EKS.GW -> AWS_VPC.EKS.US
+AWS_VPC.EKS.PS -> AWS_VPC.S3
+AWS_VPC.EKS.PS -> AWS_VPC.RDS
+AWS_VPC.EKS.RS -> AWS_VPC.REDIS
+AWS_VPC.EKS.RS -> AWS_VPC.RDS
+AWS_VPC.EKS.RS -> AWS_VPC.S3
+AWS_VPC.EKS.RS -> AWS_VPC.MSK
+AWS_VPC.EKS.AS -> AWS_VPC.MSK
+AWS_VPC.EKS.AS -> AWS_VPC.RDS
+AWS_VPC.EKS.CJ -> AWS_VPC.RDS
+AWS_VPC.EKS.CJ -> AWS_VPC.S3
+AWS_VPC.RDS -> AWS_VPC.RR
+AWS_VPC.S3 -> AWS_VPC.S3G: "lifecycle" {style.stroke-dash: 4}
+AWS_VPC.EKS.GW -> AWS_VPC.CW: "metrics/logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.PS -> AWS_VPC.AMG: "metrics/logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.RS -> AWS_VPC.AMG: "metrics/logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.AS -> AWS_VPC.AMG: "metrics/logs" {style.stroke-dash: 4}
 ```
 
 ### Scaling Strategy

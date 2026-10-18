@@ -10,8 +10,10 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { rebaseDiagramIcons } from './content-transforms.mjs';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const docsBase = join(ROOT, 'content', 'docs');
 
 // ── Source files (in sidebar order) ───────────────────────────────────────────
@@ -84,6 +86,9 @@ for (const { file } of DESIGNS) {
   // Remove H1 title line (Fumadocs renders it from frontmatter)
   content = content.replace(/^# .+\n+/, '');
 
+  // Source .md files live at the root; compiled MDX lives two levels deeper.
+  // Only rebase local D2 icons, never code samples or other document content.
+  content = rebaseDiagramIcons(content);
   const finalContent = frontmatter + '\n\n' + content.trimStart();
 
   const destPath = join(docsBase, file);

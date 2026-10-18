@@ -377,52 +377,59 @@ return ALLOW  // FAIL_OPEN
 
 ### Component Diagram
 
-```mermaid
-flowchart TB
-    subgraph Edge["Edge Layer"]
-        WAF[AWS WAF]
-        CDN[CloudFront]
-    end
+```d2 interactive title="rate-limiter — Thành phần hệ thống"
+direction: down
 
-    subgraph Application["Application Layer (EKS)"]
-        GW[API Gateway + Rate Limit Library]
-        SVC1[Service A + Rate Limit Library]
-        SVC2[Service B + Rate Limit Library]
-        RULESVC[Rule Management Service]
-        DASHBOARD[Dashboard Service]
-    end
+Edge: "Edge Layer" {
+}
+Application: "Application Layer (EKS)" {
+}
+Data: "Data Layer" {
+}
+Async: "Async Layer" {
+}
+Observability: "Observability" {
+}
+Edge.WAF: "AWS WAF" {
+  icon: ./diagrams/icons/waf.svg
+}
+Edge.CDN: "CloudFront" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+Application.GW: "API Gateway + Rate Limit Library"
+Application.SVC1: "Service A + Rate Limit Library"
+Application.SVC2: "Service B + Rate Limit Library"
+Application.RULESVC: "Rule Management Service"
+Application.DASHBOARD: "Dashboard Service"
+Data.REDIS: "Redis Cluster\nCounters" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+Data.DB: "PostgreSQL\nRules + Violations" {
+  shape: cylinder
+  icon: ./diagrams/icons/postgres.svg
+}
+Async.KAFKA: "Kafka"
+Observability.PROM: "Prometheus"
+Observability.GRAFANA: "Grafana"
 
-    subgraph Data["Data Layer"]
-        REDIS[(Redis Cluster\nCounters)]
-        DB[(PostgreSQL\nRules + Violations)]
-    end
-
-    subgraph Async["Async Layer"]
-        KAFKA[Kafka]
-    end
-
-    subgraph Observability["Observability"]
-        PROM[Prometheus]
-        GRAFANA[Grafana]
-    end
-
-    CDN --> WAF --> GW
-    GW --> SVC1
-    GW --> SVC2
-    GW --> REDIS
-    SVC1 --> REDIS
-    SVC2 --> REDIS
-    RULESVC --> DB
-    RULESVC --> KAFKA
-    KAFKA --> GW
-    KAFKA --> SVC1
-    KAFKA --> SVC2
-    DASHBOARD --> DB
-    DASHBOARD --> REDIS
-
-    GW -.metrics.-> PROM
-    SVC1 -.metrics.-> PROM
-    PROM -.-> GRAFANA
+Edge.CDN -> Edge.WAF
+Edge.WAF -> Application.GW
+Application.GW -> Application.SVC1
+Application.GW -> Application.SVC2
+Application.GW -> Data.REDIS
+Application.SVC1 -> Data.REDIS
+Application.SVC2 -> Data.REDIS
+Application.RULESVC -> Data.DB
+Application.RULESVC -> Async.KAFKA
+Async.KAFKA -> Application.GW
+Async.KAFKA -> Application.SVC1
+Async.KAFKA -> Application.SVC2
+Application.DASHBOARD -> Data.DB
+Application.DASHBOARD -> Data.REDIS
+Application.GW -> Observability.PROM: "metrics" {style.stroke-dash: 4}
+Application.SVC1 -> Observability.PROM: "metrics" {style.stroke-dash: 4}
+Observability.PROM -> Observability.GRAFANA {style.stroke-dash: 4}
 ```
 
 ### Bảng vai trò từng component
@@ -550,23 +557,22 @@ sequenceDiagram
 
 ### Flow 3: Token Bucket — Redis Lua Script (Atomic Operation)
 
-```mermaid
-sequenceDiagram
-    participant RL as Rate Limit Library
-    participant R as Redis
+```d2 interactive title="Token Bucket — Redis Lua atomic operation"
+shape: sequence_diagram
+RL: Rate Limit Library
+R: Redis
 
-    RL->>R: EVALSHA <sha1>\nKEYS[1] = "rl:client123:/api/products"\nARGV = [max_tokens=10, refill_rate=2, now=0(use Redis TIME)]
-    Note right of R: EVALSHA dùng SHA1 hash của Lua script đã pre-load (SCRIPT LOAD)
-
-    Note over R: Lua Script (atomic):
-    Note over R: 1. GET key → {tokens: 3.2, last: 1709110800.000}
-    Note over R: 2. now = redis.TIME(), elapsed = now - last, refill = elapsed * 2
-    Note over R: 3. tokens = min(3.2 + 1.0, 10) = 4.2
-    Note over R: 4. tokens >= 1 → tokens = 3.2, allowed = true
-    Note over R: 5. SET key {tokens: 3.2, last: 1709110800.500}
-    Note over R: 6. EXPIRE key TTL = max_tokens / refill_rate + buffer
-
-    R-->>RL: [1, 3, 1709110805]\n(allowed, remaining_floor, reset_ts)
+RL -> R: "EVALSHA <sha1>\nKEYS[1] = \"rl:client123:/api/products\"\nARGV = [max_tokens=10, refill_rate=2, now=0(use Redis TIME)]"
+R."EVALSHA dùng SHA1 hash của Lua script đã pre-load (SCRIPT LOAD)"
+atomic: "Lua Script (atomic)" {
+  R."1. GET key → {tokens: 3.2, last: 1709110800.000}"
+  R."2. now = redis.TIME(), elapsed = now - last, refill = elapsed * 2"
+  R."3. tokens = min(3.2 + 1.0, 10) = 4.2"
+  R."4. tokens >= 1 → tokens = 3.2, allowed = true"
+  R."5. SET key {tokens: 3.2, last: 1709110800.500}"
+  R."6. EXPIRE key TTL = max_tokens / refill_rate + buffer"
+}
+R -> RL: "[1, 3, 1709110805]\n(allowed, remaining_floor, reset_ts)" {style.stroke-dash: 4}
 ```
 
 ### Error handling & Edge cases
@@ -608,87 +614,129 @@ public interface RateLimiter {
 
 ### Request/Response Examples
 
+> 📌 Các cặp dưới đây là transcript **HTTP/1.1** minh họa, không gửi request thật. Body hiển thị ở dạng đã decode; chức năng copy không tạo wire format hay cURL. Token chỉ là dữ liệu ví dụ.
+
 **Create Rule**
-```http
-POST /api/v1/rules HTTP/1.1
-Host: api.ratelimiter.internal
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-Idempotency-Key: 7a3f9e28-4c1d-4b5a-8e7f-123456789abc
-
-{
-  "name": "free-plan-products-api",
-  "description": "Rate limit for free plan users on products endpoint",
-  "scope": "PER_API_KEY",
-  "endpointPattern": "/api/v1/products/**",
-  "method": "GET",
-  "algorithm": "TOKEN_BUCKET",
-  "maxRequests": 100,
-  "windowSeconds": 60,
-  "burstSize": 20,
-  "plan": "free",
-  "enabled": true,
-  "priority": 10
-}
-```
-
-```http
-HTTP/1.1 201 Created
-Content-Type: application/json
-Location: /api/v1/rules/42
-
-{
-  "id": 42,
-  "name": "free-plan-products-api",
-  "description": "Rate limit for free plan users on products endpoint",
-  "scope": "PER_API_KEY",
-  "endpointPattern": "/api/v1/products/**",
-  "method": "GET",
-  "algorithm": "TOKEN_BUCKET",
-  "maxRequests": 100,
-  "windowSeconds": 60,
-  "burstSize": 20,
-  "plan": "free",
-  "enabled": true,
-  "priority": 10,
-  "createdAt": "2026-03-01T10:00:00Z",
-  "updatedAt": "2026-03-01T10:00:00Z",
-  "createdBy": "admin@platform.com"
-}
+```protocol-exchange
+title: POST /api/v1/rules
+variants:
+  - id: success
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/rules
+      headers:
+        - id: header-1
+          name: Host
+          value: api.ratelimiter.internal
+        - id: header-2
+          name: Content-Type
+          value: application/json
+        - id: header-3
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+        - id: header-4
+          name: Idempotency-Key
+          value: 7a3f9e28-4c1d-4b5a-8e7f-123456789abc
+      body:
+        kind: json
+        json: |
+          {
+            "name": "free-plan-products-api",
+            "description": "Rate limit for free plan users on products endpoint",
+            "scope": "PER_API_KEY",
+            "endpointPattern": "/api/v1/products/**",
+            "method": "GET",
+            "algorithm": "TOKEN_BUCKET",
+            "maxRequests": 100,
+            "windowSeconds": 60,
+            "burstSize": 20,
+            "plan": "free",
+            "enabled": true,
+            "priority": 10
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+        - id: header-2
+          name: Location
+          value: /api/v1/rules/42
+      body:
+        kind: json
+        json: |
+          {
+            "id": 42,
+            "name": "free-plan-products-api",
+            "description": "Rate limit for free plan users on products endpoint",
+            "scope": "PER_API_KEY",
+            "endpointPattern": "/api/v1/products/**",
+            "method": "GET",
+            "algorithm": "TOKEN_BUCKET",
+            "maxRequests": 100,
+            "windowSeconds": 60,
+            "burstSize": 20,
+            "plan": "free",
+            "enabled": true,
+            "priority": 10,
+            "createdAt": "2026-03-01T10:00:00Z",
+            "updatedAt": "2026-03-01T10:00:00Z",
+            "createdBy": "admin@platform.com"
+          }
 ```
 
 **Create Override for VIP Client**
-```http
-POST /api/v1/rules/42/overrides HTTP/1.1
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-
-{
-  "clientId": "api-key-partner-xyz",
-  "maxRequests": 500,
-  "windowSeconds": 60,
-  "burstSize": 100,
-  "reason": "Partner agreement — higher limit",
-  "expireAt": "2027-01-01T00:00:00Z"
-}
-```
-
-```http
-HTTP/1.1 201 Created
-Content-Type: application/json
-
-{
-  "id": 7,
-  "ruleId": 42,
-  "clientId": "api-key-partner-xyz",
-  "maxRequests": 500,
-  "windowSeconds": 60,
-  "burstSize": 100,
-  "reason": "Partner agreement — higher limit",
-  "expireAt": "2027-01-01T00:00:00Z",
-  "createdAt": "2026-03-01T10:30:00Z",
-  "createdBy": "admin@platform.com"
-}
+```protocol-exchange
+title: POST /api/v1/rules/42/overrides
+variants:
+  - id: success
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/rules/42/overrides
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+        - id: header-2
+          name: Authorization
+          value: Bearer eyJhbGciOiJSUzI1NiIs...
+      body:
+        kind: json
+        json: |
+          {
+            "clientId": "api-key-partner-xyz",
+            "maxRequests": 500,
+            "windowSeconds": 60,
+            "burstSize": 100,
+            "reason": "Partner agreement — higher limit",
+            "expireAt": "2027-01-01T00:00:00Z"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "id": 7,
+            "ruleId": 42,
+            "clientId": "api-key-partner-xyz",
+            "maxRequests": 500,
+            "windowSeconds": 60,
+            "burstSize": 100,
+            "reason": "Partner agreement — higher limit",
+            "expireAt": "2027-01-01T00:00:00Z",
+            "createdAt": "2026-03-01T10:30:00Z",
+            "createdBy": "admin@platform.com"
+          }
 ```
 
 **Rate Limited Response (trả từ Gateway cho client)**
@@ -934,47 +982,75 @@ erDiagram
 
 ### Backend Code Example — Rate Limit Library (Java / Spring Boot)
 
-```java
-@Component
-public class TokenBucketLimiter implements RateLimitAlgorithm {
+```code-walkthrough
+title: TokenBucketLimiter — đọc luồng xử lý
+language: java
+snapshots:
+  - id: implementation
+    title: TokenBucketLimiter.java
+    code: |
+      @Component
+      public class TokenBucketLimiter implements RateLimitAlgorithm {
 
-    private final RedisCounterClient redisClient;
+          private final RedisCounterClient redisClient;
 
-    public TokenBucketLimiter(RedisCounterClient redisClient) {
-        this.redisClient = redisClient;
-    }
+          public TokenBucketLimiter(RedisCounterClient redisClient) {
+              this.redisClient = redisClient;
+          }
 
-    @Override
-    public RateLimitResult check(String key, RateLimitRule rule) {
-        double maxTokens = rule.getBurstSize() != null
-                ? rule.getBurstSize()
-                : rule.getMaxRequests();
-        double refillRate = (double) rule.getMaxRequests() / rule.getWindowSeconds();
+          @Override
+          public RateLimitResult check(String key, RateLimitRule rule) {
+              double maxTokens = rule.getBurstSize() != null
+                      ? rule.getBurstSize()
+                      : rule.getMaxRequests();
+              double refillRate = (double) rule.getMaxRequests() / rule.getWindowSeconds();
 
-        // Pass 0 so Lua script uses Redis server time (TIME) to avoid pod clock skew
-        List<Object> result = redisClient.evalTokenBucket(
-                "rl:tb:" + key,
-                maxTokens,
-                refillRate,
-                0,
-                (long)(maxTokens / refillRate * 2)  // TTL: thời gian refill full bucket × 2
-        );
+              // Pass 0 so Lua script uses Redis server time (TIME) to avoid pod clock skew
+              List<Object> result = redisClient.evalTokenBucket(
+                      "rl:tb:" + key,
+                      maxTokens,
+                      refillRate,
+                      0,
+                      (long)(maxTokens / refillRate * 2)  // TTL: thời gian refill full bucket × 2
+              );
 
-        boolean allowed = ((Long) result.get(0)) == 1L;
-        long remaining = (Long) result.get(1);
-        long resetAt = (Long) result.get(2);
+              boolean allowed = ((Long) result.get(0)) == 1L;
+              long remaining = (Long) result.get(1);
+              long resetAt = (Long) result.get(2);
 
-        return RateLimitResult.builder()
-                .allowed(allowed)
-                .remaining(remaining)
-                .limit(rule.getMaxRequests())
-                .resetAt(Instant.ofEpochSecond(resetAt))
-                .retryAfterSeconds(allowed
-                        ? 0
-                        : Math.max(0, (int) (resetAt - Instant.now().getEpochSecond())))
-                .build();
-    }
-}
+              return RateLimitResult.builder()
+                      .allowed(allowed)
+                      .remaining(remaining)
+                      .limit(rule.getMaxRequests())
+                      .resetAt(Instant.ofEpochSecond(resetAt))
+                      .retryAfterSeconds(allowed
+                              ? 0
+                              : Math.max(0, (int) (resetAt - Instant.now().getEpochSecond())))
+                      .build();
+          }
+      }
+steps:
+  - id: capacity
+    title: Burst capacity và refill rate
+    description: Capacity lấy burstSize nếu có; refill rate lấy maxRequests/windowSeconds, không nhầm hai đại lượng này.
+    snapshot: implementation
+    ranges:
+      - - 10
+        - 15
+  - id: atomic
+    title: Một Lua operation tại Redis
+    description: Truyền now = 0 để script dùng Redis TIME, tránh clock skew giữa pod; TTL gấp đôi thời gian refill đầy.
+    snapshot: implementation
+    ranges:
+      - - 17
+        - 24
+  - id: result
+    title: Diễn giải kết quả
+    description: Map allowed, remaining và reset timestamp thành response; retryAfter bằng 0 khi request được cho phép.
+    snapshot: implementation
+    ranges:
+      - - 26
+        - 38
 ```
 
 ```java
@@ -1226,63 +1302,83 @@ export function RuleList() {
 
 ### Architecture Diagram
 
-```mermaid
-flowchart TB
-    subgraph Internet
-        C[API Clients]
-    end
+```d2 interactive title="rate-limiter — Kiến trúc triển khai AWS"
+direction: down
 
-    subgraph AWS_Edge
-        R53[Route53]
-        CF[CloudFront]
-        WAF[AWS WAF]
-    end
+Internet: "Internet" {
+}
+AWS_Edge: "AWS Edge" {
+}
+AWS_VPC: "AWS VPC" {
+}
+AWS_VPC.EKS: "EKS" {
+  icon: ./diagrams/icons/eks.svg
+}
+AWS_VPC.EKS.Services: "Microservices with Rate Limit Library" {
+}
+Internet.C: "API Clients"
+AWS_Edge.R53: "Route53" {
+  icon: ./diagrams/icons/route53.svg
+}
+AWS_Edge.CF: "CloudFront" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+AWS_Edge.WAF: "AWS WAF" {
+  icon: ./diagrams/icons/waf.svg
+}
+AWS_VPC.ALB: "Application Load Balancer" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+AWS_VPC.EKS.Services.GW: "API Gateway\n+ RL Library"
+AWS_VPC.EKS.Services.SVC1: "Product Service\n+ RL Library"
+AWS_VPC.EKS.Services.SVC2: "Order Service\n+ RL Library"
+AWS_VPC.EKS.RS: "Rule Management Service"
+AWS_VPC.EKS.VA: "Violation Aggregator"
+AWS_VPC.EKS.DASH: "Dashboard Service"
+AWS_VPC.REDIS: "ElastiCache Redis\nCounters" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+AWS_VPC.RDS: "RDS PostgreSQL\nRules + Violations" {
+  shape: cylinder
+  icon: ./diagrams/icons/rds.svg
+}
+AWS_VPC.MSK: "Amazon MSK / Kafka" {
+  shape: cylinder
+  icon: ./diagrams/icons/msk.svg
+}
+AWS_VPC.CW: "CloudWatch" {
+  icon: ./diagrams/icons/cloudwatch.svg
+}
+AWS_VPC.AMG: "Managed Prometheus/Grafana"
 
-    subgraph AWS_VPC
-        ALB[Application Load Balancer]
-
-        subgraph EKS
-            subgraph Services["Microservices with Rate Limit Library"]
-                GW["API Gateway\n+ RL Library"]
-                SVC1["Product Service\n+ RL Library"]
-                SVC2["Order Service\n+ RL Library"]
-            end
-            RS[Rule Management Service]
-            VA[Violation Aggregator]
-            DASH[Dashboard Service]
-        end
-
-        REDIS[(ElastiCache Redis\nCounters)]
-        RDS[(RDS PostgreSQL\nRules + Violations)]
-        MSK[(Amazon MSK / Kafka)]
-        CW[CloudWatch]
-        AMG[Managed Prometheus/Grafana]
-    end
-
-    C --> R53 --> CF --> WAF --> ALB --> GW
-    GW --> SVC1
-    GW --> SVC2
-    GW --> REDIS
-    SVC1 --> REDIS
-    SVC2 --> REDIS
-    RS --> RDS
-    RS --> MSK
-    MSK --> GW
-    MSK --> SVC1
-    MSK --> SVC2
-    MSK --> VA
-    VA --> RDS
-    DASH --> RDS
-    DASH --> AMG
-
-    GW -.metrics.-> CW
-    GW -.logs.-> CW
-    SVC1 -.metrics.-> AMG
-    SVC1 -.logs.-> CW
-    SVC2 -.metrics.-> AMG
-    SVC2 -.logs.-> CW
-    RS -.metrics.-> AMG
-    RS -.logs.-> CW
+Internet.C -> AWS_Edge.R53
+AWS_Edge.R53 -> AWS_Edge.CF
+AWS_Edge.CF -> AWS_Edge.WAF
+AWS_Edge.WAF -> AWS_VPC.ALB
+AWS_VPC.ALB -> AWS_VPC.EKS.Services.GW
+AWS_VPC.EKS.Services.GW -> AWS_VPC.EKS.Services.SVC1
+AWS_VPC.EKS.Services.GW -> AWS_VPC.EKS.Services.SVC2
+AWS_VPC.EKS.Services.GW -> AWS_VPC.REDIS
+AWS_VPC.EKS.Services.SVC1 -> AWS_VPC.REDIS
+AWS_VPC.EKS.Services.SVC2 -> AWS_VPC.REDIS
+AWS_VPC.EKS.RS -> AWS_VPC.RDS
+AWS_VPC.EKS.RS -> AWS_VPC.MSK
+AWS_VPC.MSK -> AWS_VPC.EKS.Services.GW
+AWS_VPC.MSK -> AWS_VPC.EKS.Services.SVC1
+AWS_VPC.MSK -> AWS_VPC.EKS.Services.SVC2
+AWS_VPC.MSK -> AWS_VPC.EKS.VA
+AWS_VPC.EKS.VA -> AWS_VPC.RDS
+AWS_VPC.EKS.DASH -> AWS_VPC.RDS
+AWS_VPC.EKS.DASH -> AWS_VPC.AMG
+AWS_VPC.EKS.Services.GW -> AWS_VPC.CW: "metrics" {style.stroke-dash: 4}
+AWS_VPC.EKS.Services.GW -> AWS_VPC.CW: "logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.Services.SVC1 -> AWS_VPC.AMG: "metrics" {style.stroke-dash: 4}
+AWS_VPC.EKS.Services.SVC1 -> AWS_VPC.CW: "logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.Services.SVC2 -> AWS_VPC.AMG: "metrics" {style.stroke-dash: 4}
+AWS_VPC.EKS.Services.SVC2 -> AWS_VPC.CW: "logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.RS -> AWS_VPC.AMG: "metrics" {style.stroke-dash: 4}
+AWS_VPC.EKS.RS -> AWS_VPC.CW: "logs" {style.stroke-dash: 4}
 ```
 
 ### Scaling Strategy
@@ -1426,6 +1522,35 @@ flowchart TB
 - Library: service rollback to previous version (`kubectl rollout undo`). Rules in Redis/DB không bị ảnh hưởng.
 - Rule Service: `kubectl rollout undo` + Flyway undo migration nếu cần.
 - Redis Lua scripts: library tự load script version tương ứng.
+
+#### 🔧 Phiên kiểm tra và rollback minh họa
+
+Tên namespace/deployment dưới đây là ví dụ cho **staging**; xác nhận `kubectl context` và revision trước khi dùng. Component chỉ hiển thị transcript, không thực thi lệnh. DB migration cần kế hoạch tương thích riêng, không được tự động undo cùng deployment.
+
+```terminal-session
+title: Kiểm tra rồi rollback Rule Service
+context:
+  kind: local
+  label: kubectl — staging only
+steps:
+  - id: context
+    title: Xác nhận cluster
+    command: kubectl config current-context
+    expected: Dừng lại nếu context không phải cluster staging dự kiến.
+  - id: history
+    title: Kiểm tra revision
+    command: kubectl rollout history deployment/rule-service -n rate-limiter-staging
+    expected: Xác định revision tốt gần nhất từ release record; không suy ra chỉ từ số revision.
+  - id: undo
+    title: Quay về revision trước
+    command: kubectl rollout undo deployment/rule-service -n rate-limiter-staging
+    warning: Lệnh thay đổi deployment staging. Chỉ dùng khi revision trước đã được xác nhận tương thích với schema và rules hiện tại.
+    expected: Kubernetes tạo rollout cho PodTemplate trước đó; lệnh này không rollback PostgreSQL hoặc dữ liệu Redis.
+  - id: ready
+    title: Chờ readiness
+    command: kubectl rollout status deployment/rule-service -n rate-limiter-staging --timeout=120s
+    expected: Deployment Ready; sau đó chạy smoke test rule API và kiểm tra rate_limit_errors trước khi kết thúc incident.
+```
 
 ### IaC
 - Terraform modules cho:

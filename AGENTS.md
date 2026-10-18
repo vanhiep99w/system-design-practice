@@ -47,7 +47,7 @@ system-design-practice/
 └── payment-system.md            # Thiết kế Payment System
 ```
 
-> 💡 Tất cả diagrams sử dụng **Mermaid** hoặc **ASCII art** trực tiếp trong file markdown, không cần thư mục riêng.
+> 💡 Ưu tiên **D2** trực tiếp trong file markdown qua `@vanhiep99w/docs-kit`. Giữ **Mermaid** cho sequence có `alt/par/loop` và ER có cardinality khi chuyển sang D2 làm giảm ngữ nghĩa. ASCII chỉ dành cho cây thư mục, bit layout hoặc text theo vị trí; không dùng cho architecture mới. Icon đã kiểm tra từ https://icons.d2lang.com/ lưu trong `diagrams/icons/` và nhúng lúc build.
 
 ## 📐 Template Bài Thiết Kế
 
@@ -142,8 +142,8 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 6. **Callout `> 💡`** giải thích nếu dùng stack khác default
 
 ## 4. 🧩 Defining Entities / Components
-- **Component diagram** bắt buộc (mermaid flowchart/graph)
-- Sử dụng `subgraph` để nhóm theo layer (Edge, Application, Data, Async, Observability)
+- **Component diagram** bắt buộc (D2 container/connection)
+- Sử dụng D2 container để nhóm theo layer (Edge, Application, Data, Async, Observability); `subgraph` chỉ dùng khi giữ Mermaid.
 - Kèm **bảng** mô tả vai trò từng component: `Component | Vai trò`
 - Các thành phần điển hình: Client, CDN/WAF, API Gateway, Services, Database, Cache, Message Queue, Observability stack
 
@@ -157,12 +157,12 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 ## 6. 🔄 System / App Flow
 
 ### Flow 1: [Core use case chính - ví dụ: Create]
-- **Mermaid sequence diagram** bắt buộc
+- **Sequence diagram** bắt buộc: D2 cho flow tuyến tính; Mermaid khi cần branching chính xác
 - Bao gồm tất cả participants: Client, Gateway, Services, DB, Cache, Queue
 - Thể hiện rõ `alt/else` cho branching logic (ví dụ: custom alias vs auto-generated)
 
 ### Flow 2: [Core use case thứ hai - ví dụ: Read/Query]
-- **Mermaid sequence diagram** bắt buộc
+- **Sequence diagram** bắt buộc: giữ Mermaid nếu có `alt/par/loop`
 - Thể hiện cache hit/miss logic
 - Thể hiện async operations (ví dụ: publish event to Kafka)
 
@@ -251,11 +251,11 @@ Mỗi decision quan trọng cần 1 sub-section riêng với cấu trúc:
 - Mô tả tối ưu hóa cho critical path (ví dụ: read path vs write path)
 
 ### Architecture Diagram
-- **Mermaid flowchart** bắt buộc, chi tiết với:
-  - `subgraph` cho từng layer: Internet, AWS_Edge, AWS_VPC, EKS
+- **D2 architecture diagram** bắt buộc, chi tiết với:
+  - Container cho từng layer: Internet, AWS_Edge, AWS_VPC, EKS
   - Tên AWS services cụ thể (Route53, CloudFront, ALB, EKS, RDS, ElastiCache, MSK, S3...)
   - Đường kết nối rõ ràng giữa components
-  - Đường metrics/logs dùng dotted line (`-.->`)
+  - Đường metrics/logs dùng dashed connection (`style.stroke-dash: 4`)
 
 ### Scaling Strategy
 - HPA/VPA: trigger metric cụ thể cho từng service
@@ -411,7 +411,7 @@ Các hướng optimize điển hình:
 - **Code/API/Schema**: Tiếng Anh
 
 ### Định dạng
-- Sử dụng **Mermaid diagrams** cho tất cả sơ đồ (architecture, sequence, ER, flowchart)
+- Ưu tiên **D2 diagrams** cho architecture, component và flow tuyến tính. Giữ **Mermaid** cho ER cardinality và sequence branching khi phù hợp.
 - Sử dụng **bảng** (tables) cho so sánh, capacity estimation
 - Sử dụng **code blocks** cho API definitions, schema, config
 - Sử dụng **callout blocks** (> ⚠️, > 💡, > 📌) cho notes quan trọng
@@ -423,7 +423,7 @@ Các hướng optimize điển hình:
 - Data modeling phải có **schema chi tiết** với data types
 - Trade-offs phải có **bảng so sánh** pros/cons
 
-### Diagrams (Mermaid)
+### Diagrams (D2 + Mermaid)
 - **Component Diagram**: Bắt buộc trong section 4 (Entities/Components)
 - **Sequence Diagram**: Bắt buộc trong section 6 (System Flow) — ít nhất 2 flows
 - **ER Diagram**: Bắt buộc trong section 8 (Data Modeling)
@@ -434,8 +434,8 @@ Các hướng optimize điển hình:
 1. Tạo file mới ở **root folder** với tên dạng `kebab-case.md`
 2. Copy template từ trên vào file mới
 3. Điền nội dung chi tiết cho từng section theo thứ tự 1 → 17
-4. Đảm bảo tất cả diagrams render đúng (Mermaid syntax)
-5. Đảm bảo diagrams dùng **Mermaid** hoặc **ASCII art** (không dùng file ảnh ngoài)
+4. Chạy `npm test`, `npm run typecheck`, `npm run build` để kiểm tra D2/docs-kit và kiểm tra Mermaid trong browser.
+5. Viết diagram bằng **D2** hoặc **Mermaid**; icon local được nhúng SVG lúc build, không dùng ảnh chụp diagram. Giữ nguyên 17 section.
 6. Cập nhật bảng danh sách bài trong `README.md`
 6. Review lại toàn bộ nội dung trước khi hoàn tất
 

@@ -1,0 +1,13 @@
+{
+  "eks.svg": "https://icons.d2lang.com/aws/Compute/Amazon-Elastic-Kubernetes-Service.svg",
+  "rds.svg": "https://icons.d2lang.com/aws/Database/Amazon-RDS.svg",
+  "redis.svg": "https://icons.d2lang.com/dev/redis.svg",
+  "postgres.svg": "https://icons.d2lang.com/dev/postgresql.svg",
+  "s3.svg": "https://icons.d2lang.com/aws/Storage/Amazon-Simple-Storage-Service-S3.svg",
+  "cloudfront.svg": "https://icons.d2lang.com/aws/Networking%20%26%20Content%20Delivery/Amazon-CloudFront.svg",
+  "route53.svg": "https://icons.d2lang.com/aws/Networking%20%26%20Content%20Delivery/Amazon-Route-53.svg",
+  "load-balancer.svg": "https://icons.d2lang.com/aws/Networking%20%26%20Content%20Delivery/Elastic-Load-Balancing.svg",
+  "msk.svg": "https://icons.d2lang.com/aws/Analytics/Amazon-Managed-Streaming-for-Kafka.svg",
+  "cloudwatch.svg": "https://icons.d2lang.com/aws/Management%20%26%20Governance/Amazon-CloudWatch.svg",
+  "waf.svg": "https://icons.d2lang.com/aws/Security%2C%20Identity%2C%20%26%20Compliance/AWS-WAF.svg"
+}

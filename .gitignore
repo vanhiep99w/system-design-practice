@@ -12,6 +12,10 @@ content/
 # Wrangler
 .wrangler/
 
+# Build-time diagram cache (when a non-Next cache path is used)
+.cache/
+
 # Misc
 .DS_Store
 *.local
+*.tsbuildinfo

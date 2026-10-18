@@ -475,28 +475,62 @@ Nếu không cache:
 - Analytics SLA: cho phép trễ `1-5 phút` để đổi lấy khả năng scale và ổn định.
 
 ## 4. 🧩 Defining Entities / Components
-```mermaid
-flowchart LR
-    U[User / Browser / Mobile App] --> CF[CloudFront + WAF]
-    CF --> ALB[ALB]
-    ALB --> GW[Spring Cloud Gateway]
+```d2 interactive title="url-shortener — Thành phần hệ thống"
+direction: right
 
-    GW --> RL_REDIS[(ElastiCache Redis Rate Limit)]
-    GW --> URLSVC[URL Management Service\n+ ID Generator lib]
-    GW --> REDIRSVC[Redirect Service]
+U: "User / Browser / Mobile App"
+CF: "CloudFront + WAF" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+ALB: "ALB" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+GW: "Spring Cloud Gateway"
+RL_REDIS: "ElastiCache Redis Rate Limit" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+URLSVC: "URL Management Service\n+ ID Generator lib"
+REDIRSVC: "Redirect Service"
+PG: "PostgreSQL RDS" {
+  shape: cylinder
+  icon: ./diagrams/icons/rds.svg
+}
+REDIS: "ElastiCache Redis\nRedirect Cache" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+KAFKA: "Kafka / MSK" {
+  shape: cylinder
+  icon: ./diagrams/icons/msk.svg
+}
+ANSVC: "Analytics Service"
+PGS: "PostgreSQL Stats" {
+  shape: cylinder
+  icon: ./diagrams/icons/postgres.svg
+}
+S3: "S3 Data Lake" {
+  shape: cylinder
+  icon: ./diagrams/icons/s3.svg
+}
+OBS: "Prometheus + Grafana + CloudWatch"
 
-    URLSVC --> PG[(PostgreSQL RDS)]
-    REDIRSVC --> REDIS[(ElastiCache Redis\nRedirect Cache)]
-    REDIRSVC --> PG
-
-    REDIRSVC --> KAFKA[(Kafka / MSK)]
-    KAFKA --> ANSVC[Analytics Service]
-    ANSVC --> PGS[(PostgreSQL Stats)]
-    ANSVC --> S3[(S3 Data Lake)]
-
-    OBS[Prometheus + Grafana + CloudWatch] -. monitor .-> GW
-    OBS -. monitor .-> URLSVC
-    OBS -. monitor .-> REDIRSVC
+U -> CF
+CF -> ALB
+ALB -> GW
+GW -> RL_REDIS
+GW -> URLSVC
+GW -> REDIRSVC
+URLSVC -> PG
+REDIRSVC -> REDIS
+REDIRSVC -> PG
+REDIRSVC -> KAFKA
+KAFKA -> ANSVC
+ANSVC -> PGS
+ANSVC -> S3
+OBS -> GW: "monitor" {style.stroke-dash: 4}
+OBS -> URLSVC: "monitor" {style.stroke-dash: 4}
+OBS -> REDIRSVC: "monitor" {style.stroke-dash: 4}
 ```
 
 | Component | Vai trò |
@@ -609,38 +643,72 @@ sequenceDiagram
 | GET | `/api/v1/urls?cursor=...&limit=20` | JWT | Danh sách URL của user |
 
 ### Request/Response Examples
-```http
-POST /api/v1/urls
-Content-Type: application/json
-Idempotency-Key: 3f8f5e18-1fd3-4d16-8fdb-8bd1519e41d5
-Authorization: Bearer <token>
 
-{
-  "longUrl": "https://example.com/products/spring-boot-url-shortener-guide",
-  "customAlias": "spring-guide-2026",
-  "expireAt": "2026-12-31T23:59:59Z"
-}
+> 📌 Các cặp dưới đây là transcript **HTTP/1.1** minh họa, không gửi request thật. Body hiển thị ở dạng đã decode; chức năng copy không tạo wire format hay cURL. Token chỉ là dữ liệu ví dụ.
+```protocol-exchange
+title: Tạo short URL
+variants:
+  - id: created
+    title: 201 Created
+    request:
+      method: POST
+      url: /api/v1/urls
+      headers:
+        - id: header-1
+          name: Content-Type
+          value: application/json
+        - id: header-2
+          name: Idempotency-Key
+          value: 3f8f5e18-1fd3-4d16-8fdb-8bd1519e41d5
+        - id: header-3
+          name: Authorization
+          value: Bearer <token>
+      body:
+        kind: json
+        json: |
+          {
+            "longUrl": "https://example.com/products/spring-boot-url-shortener-guide",
+            "customAlias": "spring-guide-2026",
+            "expireAt": "2026-12-31T23:59:59Z"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - id: content-type
+          name: Content-Type
+          value: application/json
+      body:
+        kind: json
+        json: |
+          {
+            "id": "01J7W6FQ3PR8M1H9B2Y7TZ0Y4D",
+            "shortCode": "spring-guide-2026",
+            "shortUrl": "https://tiny.example.com/spring-guide-2026",
+            "longUrl": "https://example.com/products/spring-boot-url-shortener-guide",
+            "createdAt": "2026-02-28T10:00:00Z",
+            "expireAt": "2026-12-31T23:59:59Z"
+          }
 ```
 
-```json
-{
-  "id": "01J7W6FQ3PR8M1H9B2Y7TZ0Y4D",
-  "shortCode": "spring-guide-2026",
-  "shortUrl": "https://tiny.example.com/spring-guide-2026",
-  "longUrl": "https://example.com/products/spring-boot-url-shortener-guide",
-  "createdAt": "2026-02-28T10:00:00Z",
-  "expireAt": "2026-12-31T23:59:59Z"
-}
-```
-
-```http
-GET /abc123x
-```
-
-```http
-HTTP/1.1 301 Moved Permanently
-Location: https://example.com/products/spring-boot-url-shortener-guide
-Cache-Control: public, max-age=86400
+```protocol-exchange
+title: GET /abc123x
+variants:
+  - id: success
+    title: 301 Moved Permanently
+    request:
+      method: GET
+      url: /abc123x
+    response:
+      status: 301
+      statusText: Moved Permanently
+      headers:
+        - id: header-1
+          name: Location
+          value: https://example.com/products/spring-boot-url-shortener-guide
+        - id: header-2
+          name: Cache-Control
+          value: public, max-age=86400
 ```
 
 ### Error Response Format
@@ -790,34 +858,62 @@ CREATE TABLE short_urls_p31 PARTITION OF short_urls FOR VALUES WITH (MODULUS 32,
 - `AuditLoggingAspect` (`@Aspect`): log structured audit cho actions quan trọng.
 
 ### Backend Code Example (Java / Spring Boot)
-```java
-@Service
-public class ShortUrlService {
+```code-walkthrough
+title: ShortUrlService — đọc luồng xử lý
+language: java
+snapshots:
+  - id: implementation
+    title: ShortUrlService.java
+    code: |
+      @Service
+      public class ShortUrlService {
 
-    private final ShortUrlRepository shortUrlRepository;
-    private final IdGeneratorClient idGeneratorClient;
+          private final ShortUrlRepository shortUrlRepository;
+          private final IdGeneratorClient idGeneratorClient;
 
-    public ShortUrlService(ShortUrlRepository shortUrlRepository,
-                           IdGeneratorClient idGeneratorClient) {
-        this.shortUrlRepository = shortUrlRepository;
-        this.idGeneratorClient = idGeneratorClient;
-    }
+          public ShortUrlService(ShortUrlRepository shortUrlRepository,
+                                 IdGeneratorClient idGeneratorClient) {
+              this.shortUrlRepository = shortUrlRepository;
+              this.idGeneratorClient = idGeneratorClient;
+          }
 
-    @Transactional
-    public ShortUrlResponse create(CreateShortUrlRequest req, Long userId) {
-        String shortCode = req.customAlias() != null
-                ? req.customAlias()
-                : Base62.encode(idGeneratorClient.nextId());
+          @Transactional
+          public ShortUrlResponse create(CreateShortUrlRequest req, Long userId) {
+              String shortCode = req.customAlias() != null
+                      ? req.customAlias()
+                      : Base62.encode(idGeneratorClient.nextId());
 
-        if (shortUrlRepository.existsByShortCode(shortCode)) {
-            throw new ConflictException("ALIAS_ALREADY_EXISTS");
-        }
+              if (shortUrlRepository.existsByShortCode(shortCode)) {
+                  throw new ConflictException("ALIAS_ALREADY_EXISTS");
+              }
 
-        ShortUrlEntity entity = ShortUrlEntity.of(shortCode, req.longUrl(), userId, req.expireAt());
-        shortUrlRepository.save(entity);
-        return ShortUrlResponse.from(entity);
-    }
-}
+              ShortUrlEntity entity = ShortUrlEntity.of(shortCode, req.longUrl(), userId, req.expireAt());
+              shortUrlRepository.save(entity);
+              return ShortUrlResponse.from(entity);
+          }
+      }
+steps:
+  - id: deps
+    title: Constructor injection
+    description: Repository và ID generator được inject; service không tạo dependency trong business method.
+    snapshot: implementation
+    ranges:
+      - - 1
+        - 11
+  - id: code
+    title: Alias hoặc Snowflake + Base62
+    description: Custom alias được giữ nguyên; nếu không có thì encode ID đã sinh thành short code.
+    snapshot: implementation
+    ranges:
+      - - 13
+        - 17
+  - id: save
+    title: Kiểm tra và lưu mapping
+    description: Exists-check trả lỗi thân thiện, nhưng unique constraint vẫn là hàng rào chống race giữa các request đồng thời.
+    snapshot: implementation
+    ranges:
+      - - 19
+        - 25
 ```
 
 ### Frontend Code Example (React + TypeScript)
@@ -861,52 +957,78 @@ export function CreateUrlForm() {
 - RDS PostgreSQL Multi-AZ + read replicas cho traffic đọc metadata.
 - ElastiCache Redis cluster mode enabled để scale ngang.
 
-```mermaid
-flowchart TB
-    subgraph Internet
-      C[Client/Browsers]
-    end
+```d2 interactive title="url-shortener — Kiến trúc triển khai AWS"
+direction: down
 
-    subgraph AWS_Edge
-      R53[Route53]
-      CF[CloudFront]
-      WAF[AWS WAF]
-    end
+Internet: "Internet" {
+}
+AWS_Edge: "AWS Edge" {
+}
+AWS_VPC: "AWS VPC" {
+}
+AWS_VPC.EKS: "EKS" {
+  icon: ./diagrams/icons/eks.svg
+}
+Internet.C: "Client/Browsers"
+AWS_Edge.R53: "Route53" {
+  icon: ./diagrams/icons/route53.svg
+}
+AWS_Edge.CF: "CloudFront" {
+  icon: ./diagrams/icons/cloudfront.svg
+}
+AWS_Edge.WAF: "AWS WAF" {
+  icon: ./diagrams/icons/waf.svg
+}
+AWS_VPC.ALB: "Application Load Balancer" {
+  icon: ./diagrams/icons/load-balancer.svg
+}
+AWS_VPC.EKS.GW: "Gateway Pods"
+AWS_VPC.EKS.US: "URL Service Pods"
+AWS_VPC.EKS.RS: "Redirect Service Pods"
+AWS_VPC.EKS.AS: "Analytics Service Pods"
+AWS_VPC.REDIS: "ElastiCache Redis" {
+  shape: cylinder
+  icon: ./diagrams/icons/redis.svg
+}
+AWS_VPC.RDS: "RDS PostgreSQL Multi-AZ" {
+  shape: cylinder
+  icon: ./diagrams/icons/rds.svg
+}
+AWS_VPC.RR: "RDS Read Replicas" {
+  shape: cylinder
+  icon: ./diagrams/icons/rds.svg
+}
+AWS_VPC.MSK: "Amazon MSK / Kafka" {
+  shape: cylinder
+  icon: ./diagrams/icons/msk.svg
+}
+AWS_VPC.S3: "S3 Data Lake" {
+  shape: cylinder
+  icon: ./diagrams/icons/s3.svg
+}
+AWS_VPC.CW: "CloudWatch" {
+  icon: ./diagrams/icons/cloudwatch.svg
+}
+AWS_VPC.AMG: "Managed Prometheus/Grafana"
 
-    subgraph AWS_VPC
-      ALB[Application Load Balancer]
-
-      subgraph EKS
-        GW[Gateway Pods]
-        US[URL Service Pods]
-        RS[Redirect Service Pods]
-        AS[Analytics Service Pods]
-      end
-
-      REDIS[(ElastiCache Redis)]
-      RDS[(RDS PostgreSQL Multi-AZ)]
-      RR[(RDS Read Replicas)]
-      MSK[(Amazon MSK / Kafka)]
-      S3[(S3 Data Lake)]
-      CW[CloudWatch]
-      AMG[Managed Prometheus/Grafana]
-    end
-
-    C --> R53 --> CF --> WAF --> ALB --> GW
-    GW --> US
-    GW --> RS
-    US --> RDS
-    RS --> REDIS
-    RS --> RDS
-    RS --> MSK
-    AS --> MSK
-    AS --> RDS
-    AS --> S3
-    RDS --> RR
-
-    GW -.metrics/logs.-> CW
-    US -.metrics/logs.-> AMG
-    RS -.metrics/logs.-> AMG
+Internet.C -> AWS_Edge.R53
+AWS_Edge.R53 -> AWS_Edge.CF
+AWS_Edge.CF -> AWS_Edge.WAF
+AWS_Edge.WAF -> AWS_VPC.ALB
+AWS_VPC.ALB -> AWS_VPC.EKS.GW
+AWS_VPC.EKS.GW -> AWS_VPC.EKS.US
+AWS_VPC.EKS.GW -> AWS_VPC.EKS.RS
+AWS_VPC.EKS.US -> AWS_VPC.RDS
+AWS_VPC.EKS.RS -> AWS_VPC.REDIS
+AWS_VPC.EKS.RS -> AWS_VPC.RDS
+AWS_VPC.EKS.RS -> AWS_VPC.MSK
+AWS_VPC.EKS.AS -> AWS_VPC.MSK
+AWS_VPC.EKS.AS -> AWS_VPC.RDS
+AWS_VPC.EKS.AS -> AWS_VPC.S3
+AWS_VPC.RDS -> AWS_VPC.RR
+AWS_VPC.EKS.GW -> AWS_VPC.CW: "metrics/logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.US -> AWS_VPC.AMG: "metrics/logs" {style.stroke-dash: 4}
+AWS_VPC.EKS.RS -> AWS_VPC.AMG: "metrics/logs" {style.stroke-dash: 4}
 ```
 
 ### Scaling Strategy
@@ -988,6 +1110,64 @@ flowchart TB
 - Alert nếu `5xx > 1%` hoặc `cache hit ratio < 80%`.
 - Runbook: detect -> triage -> mitigate -> postmortem trong 24h.
 - Distributed tracing bằng OpenTelemetry + Jaeger/X-Ray.
+
+#### 🔎 Đọc trace của một cache miss
+
+Trace dưới đây là **dữ liệu minh họa**, không phải benchmark hay bằng chứng đạt p95/p99 ở §2.2. Span dùng chung mốc 0; tổng latency là 42ms của root span, không phải tổng duration các span lồng nhau. Kafka publish được xử lý ngoài response path theo §6, không cộng vào latency redirect.
+
+```span-waterfall
+title: Redirect — Redis miss và fallback PostgreSQL
+unit: ms
+provenance:
+  kind: illustrative
+  description: Timeline do tác giả biên soạn để hướng dẫn đọc OpenTelemetry trace; không đo từ production.
+spans:
+  - id: request
+    name: GET /abc123x → 301
+    service: gateway
+    start: 0
+    duration: 42
+    status: ok
+  - id: resolve
+    parent: request
+    name: Resolve short code
+    service: redirect-service
+    start: 4
+    duration: 34
+    status: ok
+  - id: cache
+    parent: resolve
+    name: GET redirect cache — miss
+    service: redis
+    start: 6
+    duration: 2
+    status: ok
+    attributes: '{"cache.hit":false,"db.system.name":"redis"}'
+  - id: database
+    parent: resolve
+    name: SELECT mapping
+    service: postgres
+    start: 9
+    duration: 23
+    status: ok
+    attributes: '{"db.system.name":"postgresql","db.operation.name":"SELECT"}'
+  - id: populate
+    parent: resolve
+    name: SET mapping với TTL
+    service: redis
+    start: 33
+    duration: 2
+    status: ok
+annotations:
+  - id: miss-is-not-error
+    span: cache
+    title: Cache miss không phải lỗi
+    description: Không có mapping trong cache vẫn là Redis operation thành công; DB phục vụ fallback.
+  - id: inspect-query
+    span: database
+    title: Khoanh vùng database
+    description: Query chiếm 23ms trong trace minh họa; kiểm tra query plan, connection wait và saturation trước khi tăng cache TTL.
+```
 
 ## 14. 🔧 Maintenance
 - CI/CD: GitHub Actions pipeline `build -> test -> security scan -> deploy`.
