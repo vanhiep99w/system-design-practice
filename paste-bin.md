@@ -235,7 +235,7 @@ return { meta, gunzip(content) }
 ## 4. 🧩 Defining Entities / Components
 
 ```d2 interactive title="paste-bin — Thành phần hệ thống"
-direction: down
+direction: right
 
 Edge: "Edge Layer" {
 }
