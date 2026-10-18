@@ -32,6 +32,7 @@ export default defineConfig({
       [remarkD2, {
         layout: 'tala',
         sketch: false,
+        scale: 1,
         // Local, allowlisted icons are embedded in SVG at build time.
         assetsRoot: 'diagrams/icons',
         cacheDir: '.next/cache/docs-kit/d2',

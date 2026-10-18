@@ -16,7 +16,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const designs = ['url-shortener', 'paste-bin', 'chat-system', 'news-feed', 'rate-limiter'];
 const plugins = [
   [remarkD2, {
-    layout: 'tala', sketch: false, assetsRoot: 'diagrams/icons',
+    layout: 'tala', sketch: false, scale: 1, assetsRoot: 'diagrams/icons',
     cacheDir: '.next/cache/docs-kit/d2', concurrency: 1,
   }],
   remarkProtocolExchange, remarkCodeWalkthrough,
