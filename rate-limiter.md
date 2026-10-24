@@ -496,58 +496,14 @@ Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là respon
 
 ### Flow 1: Rate Limit Check (Critical Path)
 
-> Playback dưới đây minh họa thứ tự các bước do tác giả chọn; không gửi request thật, không mô phỏng concurrency và tốc độ phát không phải latency. Bạn có thể chạy hoặc xem từng bước.
-
-```d2 title="rate-limiter — Flow 1: Rate Limit Check (Critical Path)" layout=dagre mode=flow interactive=true
-# @flow
-# scenarios:
-#   - id: allowed
-#     label: "Còn token: cho phép"
-#     steps:
-#       - edge: "(C -> GW)[0]"
-#         description: "Client → API Gateway: GET /api/v1/products"
-#       - edge: "(GW -> RL)[0]"
-#         description: "API Gateway → Rate Limit Library: check(clientId=\"api-key-123\", endpoint=\"/products\", method=\"GET\")"
-#       - edge: "(RL -> RL)[0]"
-#         description: "Rate Limit Library → Rate Limit Library: Evaluate rules (in-memory cache) Match rule: \"free-plan-products\" (Token Bucket: 100 req/min)"
-#       - edge: "(RL -> R)[0]"
-#         description: "Rate Limit Library → Redis: EVALSHA <sha1> KEY=rl:api-key-123:/products ARGS=max_tokens=100, refill_rate=1.67/sec, now=0(use Redis TIME)"
-#       - edge: "(R -> RL)[0]"
-#         description: "Redis → Rate Limit Library: [1, 57, 1709111460] (allowed=1, remaining=57, reset_ts)"
-#       - edge: "(RL -> GW)[0]"
-#         description: "Rate Limit Library → API Gateway: ALLOW {remaining=57, limit=100, reset=1709111460}"
-#       - edge: "(GW -> SVC)[0]"
-#         description: "API Gateway → Backend Service: Forward request"
-#       - edge: "(SVC -> GW)[0]"
-#         description: "Backend Service → API Gateway: 200 OK {products}"
-#       - edge: "(GW -> C)[0]"
-#         description: "API Gateway → Client: 200 OK X-RateLimit-Limit: 100 X-RateLimit-Remaining: 57 X-RateLimit-Reset: 1709111460"
-#   - id: denied
-#     label: "Hết token: từ chối"
-#     steps:
-#       - edge: "(C -> GW)[0]"
-#         description: "Client → API Gateway: GET /api/v1/products"
-#       - edge: "(GW -> RL)[0]"
-#         description: "API Gateway → Rate Limit Library: check(clientId=\"api-key-123\", endpoint=\"/products\", method=\"GET\")"
-#       - edge: "(RL -> RL)[0]"
-#         description: "Rate Limit Library → Rate Limit Library: Evaluate rules (in-memory cache) Match rule: \"free-plan-products\" (Token Bucket: 100 req/min)"
-#       - edge: "(RL -> R)[0]"
-#         description: "Rate Limit Library → Redis: EVALSHA <sha1> KEY=rl:api-key-123:/products ARGS=max_tokens=100, refill_rate=1.67/sec, now=0(use Redis TIME)"
-#       - edge: "(R -> RL)[1]"
-#         description: "Redis → Rate Limit Library: [0, 0, 1709111460] (allowed=0, remaining=0, reset_ts)"
-#       - edge: "(RL -> GW)[1]"
-#         description: "Rate Limit Library → API Gateway: REJECT {remaining=0, limit=100, reset=1709111460, retryAfter=23}"
-#       - edge: "(RL -> K)[0]"
-#         description: "Rate Limit Library → Kafka: Publish ViolationEvent (async, fire-and-forget)"
-#       - edge: "(GW -> C)[1]"
-#         description: "API Gateway → Client: 429 Too Many Requests X-RateLimit-Limit: 100 X-RateLimit-Remaining: 0 Retry-After: 23"
-# @endflow
-direction: right
+```d2 interactive title="rate-limiter — Flow 1: Rate Limit Check (Critical Path)"
+# viewport-height: 140vh
+shape: sequence_diagram
 C: "Client"
 GW: "API Gateway"
 RL: "Rate Limit Library"
 R: "Redis" {
-icon: ./diagrams/icons/redis.svg
+  icon: ./diagrams/icons/redis.svg
 }
 K: "Kafka"
 SVC: "Backend Service"
@@ -560,18 +516,28 @@ RL -> RL: "Evaluate rules (in-memory cache)\nMatch rule: \"free-plan-products\"\
 RL -> R: "EVALSHA <sha1>\nKEY=rl:api-key-123:/products\nARGS=max_tokens=100,\nrefill_rate=1.67/sec, now=0(use\nRedis TIME)"
 R."EVALSHA dùng SHA1 hash của Lua\nscript đã pre-load (SCRIPT LOAD)"
 
-R -> RL: "[1, 57, 1709111460]\n(allowed=1, remaining=57,\nreset_ts)" {style.stroke-dash: 4}
-RL -> GW: "ALLOW {remaining=57, limit=100,\nreset=1709111460}" {style.stroke-dash: 4}
-GW -> SVC: "Forward request"
-SVC -> GW: "200 OK {products}" {style.stroke-dash: 4}
-GW -> C: "200 OK\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 57\nX-RateLimit-Reset: 1709111460" {style.stroke-dash: 4}
-R -> RL: "[0, 0, 1709111460]\n(allowed=0, remaining=0, reset_ts)" {style.stroke-dash: 4}
-RL -> GW: "REJECT {remaining=0, limit=100,\nreset=1709111460, retryAfter=23}" {style.stroke-dash: 4}
-RL -> K: "Publish ViolationEvent (async,\nfire-and-forget)"
-GW -> C: "429 Too Many Requests\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 0\nRetry-After: 23" {style.stroke-dash: 4}
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Tokens available" {
+    style: {
+      stroke-dash: 4
+    }
+    R -> RL: "[1, 57, 1709111460]\n(allowed=1, remaining=57,\nreset_ts)" {style.stroke-dash: 4}
+    RL -> GW: "ALLOW {remaining=57, limit=100,\nreset=1709111460}" {style.stroke-dash: 4}
+    GW -> SVC: "Forward request"
+    SVC -> GW: "200 OK {products}" {style.stroke-dash: 4}
+    GW -> C: "200 OK\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 57\nX-RateLimit-Reset: 1709111460" {style.stroke-dash: 4}
+  }
+  group_3: "else: Bucket empty" {
+    style: {
+      stroke-dash: 4
+    }
+    R -> RL: "[0, 0, 1709111460]\n(allowed=0, remaining=0, reset_ts)" {style.stroke-dash: 4}
+    RL -> GW: "REJECT {remaining=0, limit=100,\nreset=1709111460, retryAfter=23}" {style.stroke-dash: 4}
+    RL -> K: "Publish ViolationEvent (async,\nfire-and-forget)"
+    GW -> C: "429 Too Many Requests\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 0\nRetry-After: 23" {style.stroke-dash: 4}
+  }
+}
 ```
-
-Hai kịch bản loại trừ nhau: ALLOW mới gọi backend; REJECT trả 429 và không gọi backend. Event vi phạm được publish bất đồng bộ.
 
 ### Flow 2: Rule Management (Admin Path)
 

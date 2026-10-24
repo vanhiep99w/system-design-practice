@@ -574,139 +574,60 @@ OBS -> REDIRSVC: "monitor" {style.stroke-dash: 4}
 Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là response/event như nhãn mô tả. Trong group `alt`, chỉ một nhánh được chọn; `loop` là phần lặp lại. Group `par` biểu diễn các nhánh song song, không phải thứ tự thực thi từ trên xuống.
 
 ### Flow 1: Tạo short URL
-> Playback dưới đây minh họa thứ tự các bước do tác giả chọn; không gửi request thật, không mô phỏng concurrency và tốc độ phát không phải latency. Bạn có thể chạy hoặc xem từng bước.
-
-```d2 title="url-shortener — Flow 1: Tạo short URL" layout=dagre mode=flow interactive=true
-# @flow
-# scenarios:
-#   - id: alias
-#     label: "Custom alias còn trống"
-#     steps:
-#       - edge: "(C -> G)[0]"
-#         description: "Client → API Gateway: POST /api/v1/urls { longUrl, customAlias? }"
-#       - edge: "(G -> U)[0]"
-#         description: "API Gateway → URL Service: Forward request + JWT claims"
-#       - edge: "(U -> U)[0]"
-#         description: "URL Service → URL Service: Validate URL + policy"
-#       - edge: "(U -> P)[0]"
-#         description: "URL Service → PostgreSQL: Check alias uniqueness"
-#       - edge: "(P -> U)[0]"
-#         description: "PostgreSQL báo alias còn trống; chỉ trường hợp này mới tiếp tục tạo URL."
-#       - edge: "(U -> P)[1]"
-#         description: "URL Service → PostgreSQL: Insert short_url record"
-#       - edge: "(U -> R)[0]"
-#         description: "URL Service → Redis: Cache shortCode -> longUrl (TTL optional)"
-#       - edge: "(U -> G)[0]"
-#         description: "URL Service → API Gateway: 201 Created + shortUrl"
-#       - edge: "(G -> C)[0]"
-#         description: "API Gateway → Client: Response"
-#   - id: generated
-#     label: "Sinh short code"
-#     steps:
-#       - edge: "(C -> G)[0]"
-#         description: "Client → API Gateway: POST /api/v1/urls { longUrl, customAlias? }"
-#       - edge: "(G -> U)[0]"
-#         description: "API Gateway → URL Service: Forward request + JWT claims"
-#       - edge: "(U -> U)[0]"
-#         description: "URL Service → URL Service: Validate URL + policy"
-#       - edge: "(U -> I)[0]"
-#         description: "URL Service → ID Service: nextId()"
-#       - edge: "(I -> U)[0]"
-#         description: "ID Service → URL Service: 64-bit id"
-#       - edge: "(U -> U)[1]"
-#         description: "URL Service → URL Service: Base62 encode -> shortCode"
-#       - edge: "(U -> P)[1]"
-#         description: "URL Service → PostgreSQL: Insert short_url record"
-#       - edge: "(U -> R)[0]"
-#         description: "URL Service → Redis: Cache shortCode -> longUrl (TTL optional)"
-#       - edge: "(U -> G)[0]"
-#         description: "URL Service → API Gateway: 201 Created + shortUrl"
-#       - edge: "(G -> C)[0]"
-#         description: "API Gateway → Client: Response"
-# @endflow
-direction: right
+```d2 interactive title="url-shortener — Flow 1: Tạo short URL"
+# viewport-height: 120vh
+shape: sequence_diagram
 C: "Client"
 G: "API Gateway"
 U: "URL Service"
 I: "ID Service"
 P: "PostgreSQL" {
-icon: ./diagrams/icons/postgres.svg
+  icon: ./diagrams/icons/postgres.svg
 }
 R: "Redis" {
-icon: ./diagrams/icons/redis.svg
+  icon: ./diagrams/icons/redis.svg
 }
 
 C -> G: "POST /api/v1/urls { longUrl,\ncustomAlias? }"
 G -> U: "Forward request + JWT claims"
 U -> U: "Validate URL + policy"
-U -> P: "Check alias uniqueness"
-P -> U: "available / conflict" {style.stroke-dash: 4}
-U -> I: "nextId()"
-I -> U: "64-bit id" {style.stroke-dash: 4}
-U -> U: "Base62 encode -> shortCode"
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: custom alias provided" {
+    style: {
+      stroke-dash: 4
+    }
+    U -> P: "Check alias uniqueness"
+    P -> U: "available / conflict" {style.stroke-dash: 4}
+  }
+  group_3: "else: auto generated" {
+    style: {
+      stroke-dash: 4
+    }
+    U -> I: "nextId()"
+    I -> U: "64-bit id" {style.stroke-dash: 4}
+    U -> U: "Base62 encode -> shortCode"
+  }
+}
 U -> P: "Insert short_url record"
 U -> R: "Cache shortCode -> longUrl (TTL\noptional)"
 U -> G: "201 Created + shortUrl" {style.stroke-dash: 4}
 G -> C: "Response" {style.stroke-dash: 4}
 ```
 
-Custom alias ở đây giả định còn trống; alias trùng phải bị từ chối, không tiếp tục INSERT như luồng thành công. Kịch bản còn lại lấy ID rồi Base62 encode.
-
 ### Flow 2: Redirect short URL
-```d2 title="url-shortener — Flow 2: Redirect short URL" layout=dagre mode=flow interactive=true
-# @flow
-# scenarios:
-#   - id: hit
-#     label: "Redis hit (edge miss/bypass)"
-#     steps:
-#       - edge: "(B -> E)[0]"
-#         description: "Browser → Edge (CloudFront): GET /abc123x"
-#       - edge: "(E -> G)[0]"
-#         description: "Edge (CloudFront) → Gateway: Cache miss (or bypass)"
-#       - edge: "(G -> S)[0]"
-#         description: "Gateway → Redirect Service: Resolve shortCode"
-#       - edge: "(S -> R)[0]"
-#         description: "Redirect Service → Redis: GET abc123x"
-#       - edge: "(R -> S)[0]"
-#         description: "Redis → Redirect Service: longUrl"
-#       - edge: "(S -> K)[0]"
-#         description: "Redirect Service → Kafka: Publish click event async"
-#       - edge: "(S -> B)[0]"
-#         description: "Redirect Service → Browser: 301 Location: https://target-url"
-#   - id: miss
-#     label: "Redis miss (edge miss/bypass)"
-#     steps:
-#       - edge: "(B -> E)[0]"
-#         description: "Browser → Edge (CloudFront): GET /abc123x"
-#       - edge: "(E -> G)[0]"
-#         description: "Edge (CloudFront) → Gateway: Cache miss (or bypass)"
-#       - edge: "(G -> S)[0]"
-#         description: "Gateway → Redirect Service: Resolve shortCode"
-#       - edge: "(S -> R)[0]"
-#         description: "Redirect Service → Redis: GET abc123x"
-#       - edge: "(S -> P)[0]"
-#         description: "Redirect Service → PostgreSQL: SELECT long_url, expires_at, status"
-#       - edge: "(P -> S)[0]"
-#         description: "PostgreSQL → Redirect Service: row data"
-#       - edge: "(S -> R)[1]"
-#         description: "Redirect Service → Redis: SET abc123x -> longUrl"
-#       - edge: "(S -> K)[0]"
-#         description: "Redirect Service → Kafka: Publish click event async"
-#       - edge: "(S -> B)[0]"
-#         description: "Redirect Service → Browser: 301 Location: https://target-url"
-# @endflow
-direction: right
+```d2 interactive title="url-shortener — Flow 2: Redirect short URL"
+shape: sequence_diagram
 B: "Browser"
 E: "Edge (CloudFront)" {
-icon: ./diagrams/icons/cloudfront.svg
+  icon: ./diagrams/icons/cloudfront.svg
 }
 G: "Gateway"
 R: "Redis" {
-icon: ./diagrams/icons/redis.svg
+  icon: ./diagrams/icons/redis.svg
 }
 S: "Redirect Service"
 P: "PostgreSQL" {
-icon: ./diagrams/icons/postgres.svg
+  icon: ./diagrams/icons/postgres.svg
 }
 K: "Kafka"
 
@@ -714,15 +635,25 @@ B -> E: "GET /abc123x"
 E -> G: "Cache miss (or bypass)"
 G -> S: "Resolve shortCode"
 S -> R: "GET abc123x"
-R -> S: "longUrl" {style.stroke-dash: 4}
-S -> P: "SELECT long_url, expires_at,\nstatus"
-P -> S: "row data" {style.stroke-dash: 4}
-S -> R: "SET abc123x -> longUrl"
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Cache hit" {
+    style: {
+      stroke-dash: 4
+    }
+    R -> S: "longUrl" {style.stroke-dash: 4}
+  }
+  group_3: "else: Cache miss" {
+    style: {
+      stroke-dash: 4
+    }
+    S -> P: "SELECT long_url, expires_at,\nstatus"
+    P -> S: "row data" {style.stroke-dash: 4}
+    S -> R: "SET abc123x -> longUrl"
+  }
+}
 S -> K: "Publish click event async"
 S -> B: "301 Location: https://target-url" {style.stroke-dash: 4}
 ```
-
-Cả hai kịch bản đều bắt đầu sau edge cache miss hoặc bypass. Redis hit bỏ qua PostgreSQL; Redis miss đọc và nạp cache trước khi redirect.
 
 ### Error handling & Edge cases
 - Short code không tồn tại: trả `404` với landing page thân thiện (không expose internals).

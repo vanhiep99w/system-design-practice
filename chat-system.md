@@ -708,52 +708,13 @@ group_1: "alt — chỉ chọn một nhánh" {
 
 ### Flow 2: Load lịch sử tin nhắn (Message History)
 
-> Playback dưới đây minh họa thứ tự các bước do tác giả chọn; không gửi request thật, không mô phỏng concurrency và tốc độ phát không phải latency. Bạn có thể chạy hoặc xem từng bước.
-
-```d2 title="chat-system — Flow 2: Load lịch sử tin nhắn (Message History)" layout=dagre mode=flow interactive=true
-# @flow
-# scenarios:
-#   - id: hit
-#     label: "Cache hit"
-#     steps:
-#       - edge: "(C -> ALB)[0]"
-#         description: "Client → ALB: GET /api/v1/conversations/{id}/messages?before=<cursor>&limit=20"
-#       - edge: "(ALB -> HS)[0]"
-#         description: "ALB → Chat Service: forward request"
-#       - edge: "(HS -> R)[0]"
-#         description: "Chat Service → Redis Cache: GET conv:msgs:{conv_id}:page:{cursor}"
-#       - edge: "(R -> HS)[0]"
-#         description: "Redis Cache → Chat Service: [20 messages]"
-#       - edge: "(HS -> C)[0]"
-#         description: "Chat Service → Client: 200 OK {messages, next_cursor}"
-#       - edge: "(HS -> K)[0]"
-#         description: "Chat Service → Kafka: publish message.history_viewed {conversationId, userId, pageSize}"
-#   - id: miss
-#     label: "Cache miss"
-#     steps:
-#       - edge: "(C -> ALB)[0]"
-#         description: "Client → ALB: GET /api/v1/conversations/{id}/messages?before=<cursor>&limit=20"
-#       - edge: "(ALB -> HS)[0]"
-#         description: "ALB → Chat Service: forward request"
-#       - edge: "(HS -> R)[0]"
-#         description: "Chat Service → Redis Cache: GET conv:msgs:{conv_id}:page:{cursor}"
-#       - edge: "(HS -> DB)[0]"
-#         description: "Chat Service → Cassandra: SELECT * FROM messages WHERE conversation_id = ? AND message_id < ? ORDER BY message_id DESC LIMIT 20"
-#       - edge: "(DB -> HS)[0]"
-#         description: "Cassandra → Chat Service: [20 messages]"
-#       - edge: "(HS -> R)[1]"
-#         description: "Chat Service → Redis Cache: SET conv:msgs:{conv_id}:page:{cursor} EX 300"
-#       - edge: "(HS -> C)[1]"
-#         description: "Chat Service → Client: 200 OK {messages, next_cursor}"
-#       - edge: "(HS -> K)[0]"
-#         description: "Chat Service → Kafka: publish message.history_viewed {conversationId, userId, pageSize}"
-# @endflow
-direction: right
+```d2 interactive title="chat-system — Flow 2: Load lịch sử tin nhắn (Message History)"
+shape: sequence_diagram
 C: "Client"
 ALB: "ALB"
 HS: "Chat Service"
 R: "Redis Cache" {
-icon: ./diagrams/icons/redis.svg
+  icon: ./diagrams/icons/redis.svg
 }
 DB: "Cassandra"
 K: "Kafka"
@@ -762,16 +723,26 @@ C -> ALB: "GET\n/api/v1/conversations/{id}/messages?before=<cursor>&limit=20"
 ALB -> HS: "forward request"
 
 HS -> R: "GET\nconv:msgs:{conv_id}:page:{cursor}"
-R -> HS: "[20 messages]" {style.stroke-dash: 4}
-HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
-HS -> DB: "SELECT * FROM messages WHERE\nconversation_id = ? AND message_id\n< ? ORDER BY message_id DESC LIMIT\n20"
-DB -> HS: "[20 messages]" {style.stroke-dash: 4}
-HS -> R: "SET\nconv:msgs:{conv_id}:page:{cursor}\nEX 300"
-HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
+group_1: "alt — chỉ chọn một nhánh" {
+  group_2: "if: Cache HIT" {
+    style: {
+      stroke-dash: 4
+    }
+    R -> HS: "[20 messages]" {style.stroke-dash: 4}
+    HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
+  }
+  group_3: "else: Cache MISS" {
+    style: {
+      stroke-dash: 4
+    }
+    HS -> DB: "SELECT * FROM messages WHERE\nconversation_id = ? AND message_id\n< ? ORDER BY message_id DESC LIMIT\n20"
+    DB -> HS: "[20 messages]" {style.stroke-dash: 4}
+    HS -> R: "SET\nconv:msgs:{conv_id}:page:{cursor}\nEX 300"
+    HS -> C: "200 OK {messages, next_cursor}" {style.stroke-dash: 4}
+  }
+}
 HS -> K: "publish message.history_viewed\n{conversationId, userId, pageSize}"
 ```
-
-Chọn Cache hit để thấy request bỏ qua Cassandra; Cache miss đọc Cassandra rồi nạp Redis. Event history_viewed là thao tác bất đồng bộ, không phải một nhánh query khác.
 
 **Chi tiết**:
 - Cursor-based pagination dùng `message_id` (Snowflake, sortable) → hiệu quả hơn offset-based
