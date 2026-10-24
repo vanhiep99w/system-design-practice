@@ -340,49 +340,7 @@ Các sequence D2 dưới đây đọc từ trên xuống; nét đứt là respon
 
 Luồng dưới đây đi từ trên xuống; mũi tên nét đứt là response. Publish `PasteCreatedEvent` là async, không chờ consumer xử lý trước khi trả `201 Created`.
 
-> Playback dưới đây minh họa thứ tự các bước do tác giả chọn; không gửi request thật, không mô phỏng concurrency và tốc độ phát không phải latency. Bạn có thể chạy hoặc xem từng bước.
-
-```d2 title="Create Paste — lưu content và metadata" mode=flow interactive=true
-# @flow
-# scenarios:
-#   - id: main
-#     label: "Kịch bản minh họa"
-#     steps:
-#       - edge: "(U -> GW)[0]"
-#         description: "User → API Gateway: POST /api/v1/pastes {content, language, visibility, expireIn}"
-#       - edge: "(GW -> GW)[0]"
-#         description: "API Gateway → API Gateway: Validate JWT (if present), rate limit check"
-#       - edge: "(GW -> PS)[0]"
-#         description: "API Gateway → Paste Service: Forward request"
-#       - edge: "(PS -> PS)[0]"
-#         description: "Paste Service → Paste Service: Validate input (size, content type)"
-#       - edge: "(PS -> IDG)[0]"
-#         description: "Paste Service → ID Generator: Generate Snowflake ID"
-#       - edge: "(IDG -> PS)[0]"
-#         description: "ID Generator → Paste Service: snowflake_id"
-#       - edge: "(PS -> PS)[1]"
-#         description: "Paste Service → Paste Service: Base62 encode → short_code"
-#       - edge: "(PS -> PS)[2]"
-#         description: "Paste Service → Paste Service: gzip compress content"
-#       - edge: "(PS -> S3)[0]"
-#         description: "Paste Service → S3: PUT pastes/{short_code} (compressed content)"
-#       - edge: "(S3 -> PS)[0]"
-#         description: "S3 → Paste Service: 200 OK"
-#       - edge: "(PS -> DB)[0]"
-#         description: "Paste Service → PostgreSQL: INSERT paste_metadata (short_code, language, visibility, expire_at, s3_key, user_id)"
-#       - edge: "(DB -> PS)[0]"
-#         description: "PostgreSQL → Paste Service: Created"
-#       - edge: "(PS -> CACHE)[0]"
-#         description: "Paste Service → Redis: SET paste:{short_code} (metadata + content, TTL=1h)"
-#       - edge: "(CACHE -> PS)[0]"
-#         description: "Redis → Paste Service: OK"
-#       - edge: "(PS -> K)[0]"
-#         description: "Paste Service → Kafka: Publish PasteCreatedEvent (async)"
-#       - edge: "(PS -> GW)[0]"
-#         description: "Paste Service → API Gateway: 201 Created {shortCode, pasteUrl, rawUrl, expireAt}"
-#       - edge: "(GW -> U)[0]"
-#         description: "API Gateway → User: 201 Created"
-# @endflow
+```d2 interactive title="Create Paste — lưu content và metadata"
 # viewport-height: 130vh
 shape: sequence_diagram
 U: "User"
