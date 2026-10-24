@@ -55,8 +55,8 @@ for (const slug of designs) {
     assert.deepEqual(sections, Array.from({ length: 17 }, (_, i) => i + 1));
     const blocks = fences(content);
     assert.equal(blocks.filter(m => m[1] === 'mermaid').length, 0, 'all diagrams use build-time D2');
-    const sequences = blocks.filter(m => /^d2\b/.test(m[1]) && /^shape: sequence_diagram$/m.test(m[2]));
-    assert.ok(sequences.length >= 2, 'core use cases must retain sequence diagrams');
+    const requestViews = blocks.filter(m => /^d2\b/.test(m[1]) && (/^shape: sequence_diagram$/m.test(m[2]) || /\bmode=flow\b/.test(m[1])));
+    assert.ok(requestViews.length >= 2, 'core use cases need sequence or authored request-flow views');
     assert.equal(blocks.filter(m => /^d2\b/.test(m[1]) && /shape: sql_table/m.test(m[2])).length, 1);
     const enhanced = blocks.filter(m => /^(d2|protocol-exchange|code-walkthrough|terminal-session|span-waterfall)\b/.test(m[1]));
     assert.ok(enhanced.filter(m => m[1].startsWith('d2 ')).length >= 2);
@@ -74,6 +74,34 @@ for (const slug of designs) {
     };
     for (const node of tree.children.filter(n => n.name === 'D2InteractiveDiagram')) {
       const source = attribute(node, 'source');
+      if (/^# @flow$/m.test(source)) {
+        assert.equal(attribute(node, 'mode'), 'flow');
+        const flow = attribute(node, 'flow');
+        const scenario = id => {
+          const found = flow.scenarios.find(item => item.id === id);
+          assert.ok(found, `${slug}: missing ${id} scenario`);
+          return found;
+        };
+        const visits = (id, actor) => scenario(id).steps.some(step => step.from === actor || step.to === actor);
+        const caption = attribute(node, 'caption');
+        if (slug === 'chat-system' || (slug === 'url-shortener' && caption.includes('Redirect'))) {
+          const database = slug === 'chat-system' ? 'DB' : 'P';
+          assert.equal(visits('hit', database), false, 'cache hit must skip the database');
+          assert.equal(visits('miss', database), true, 'cache miss must query the database');
+          assert.ok(scenario('miss').steps.some(step => /SET/.test(step.description)), 'miss must populate cache');
+        }
+        if (slug === 'url-shortener' && caption.includes('Tạo short URL')) {
+          assert.equal(visits('alias', 'I'), false, 'custom alias does not allocate a Snowflake ID');
+          assert.equal(visits('generated', 'I'), true);
+          assert.ok(scenario('alias').steps.some(step => /alias còn trống/.test(step.description)));
+        }
+        if (slug === 'rate-limiter') {
+          assert.equal(visits('allowed', 'SVC'), true);
+          assert.equal(visits('denied', 'SVC'), false, '429 must not reach the backend');
+          assert.equal(visits('allowed', 'K'), false, 'allowed request does not publish a violation');
+          assert.ok(scenario('denied').steps.some(step => /429/.test(step.description)));
+        }
+      }
       const frames = [...source.matchAll(/^\s*(?:group_\d+|atomic): "[^"\n]+" \{$/gm)].length;
       if (!frames) continue;
       assert.doesNotMatch(source, /fill: transparent|stroke: "#64748b"|stroke-width: 2/, 'use package frame defaults, not per-page copies');
@@ -132,17 +160,17 @@ test('paste-bin: D2 sequences preserve ordered messages, responses and burn-afte
   ]);
 });
 
-test('all migrated sequences retain message counts, dashed responses, branches, loops and parallel labels', async () => {
+test('request views retain messages and responses; alternatives use frames or flow scenarios', async () => {
   const contracts = {
-    'url-shortener': [[12, 4, ['if: custom alias provided', 'else: auto generated']], [10, 3, ['if: Cache hit', 'else: Cache miss']]],
+    'url-shortener': [[12, 4, ['Custom alias còn trống', 'Sinh short code']], [10, 3, ['Redis hit (edge miss/bypass)', 'Redis miss (edge miss/bypass)']]],
     'paste-bin': [[17, 6, []], [25, 13, ['if: CDN cache hit', 'else: CDN cache miss', 'if: Cache hit', 'else: Cache miss', 'if: Paste not found', 'else: Paste expired', 'else: Paste found']], [11, 4, ['Lần truy cập sau → 410 Gone']]],
-    'chat-system': [[19, 6, ['if: User B online', 'else: User B offline']], [10, 4, ['if: Cache HIT', 'else: Cache MISS']]],
+    'chat-system': [[19, 6, ['if: User B online', 'else: User B offline']], [10, 4, ['Cache hit', 'Cache miss']]],
     'news-feed': [[26, 6, ['if: Post có media', 'if: Normal User (< 10K followers)', 'else: Celebrity User (≥ 10K followers)', '[K,FS] Async processing']], [26, 11, ['if: Cache HIT', 'else: Cache MISS', 'loop — lặp lại cho Each celebrity', 'if: All posts in cache', 'else: Some cache miss', 'Merge celebrity posts']]],
-    'rate-limiter': [[13, 7, ['if: Tokens available', 'else: Bucket empty', 'EVALSHA dùng SHA1 hash']], [10, 4, ['par — các nhánh chạy song song, không theo thứ tự dọc', 'nhánh song song: Broadcast to all instances', 'nhánh song song: nhánh còn lại', '[GW1,GW2] New rule active within seconds']]],
+    'rate-limiter': [[13, 7, ['Còn token: cho phép', 'Hết token: từ chối', 'EVALSHA dùng SHA1 hash']], [10, 4, ['par — các nhánh chạy song song, không theo thứ tự dọc', 'nhánh song song: Broadcast to all instances', 'nhánh song song: nhánh còn lại', '[GW1,GW2] New rule active within seconds']]],
   };
   for (const [slug, expected] of Object.entries(contracts)) {
     const content = await readFile(join(root, `${slug}.md`), 'utf8');
-    const sequences = fences(content).filter(m => /^d2\b/.test(m[1]) && /^shape: sequence_diagram$/m.test(m[2]));
+    const sequences = fences(content).filter(m => /^d2\b/.test(m[1]) && (/^shape: sequence_diagram$/m.test(m[2]) || /\bmode=flow\b/.test(m[1])));
     assert.equal(sequences.length, slug === 'rate-limiter' ? 3 : expected.length);
     for (const [i, [messages, responses, labels]] of expected.entries()) {
       const source = sequences[i][2].replace(/\\n/g, ' ');

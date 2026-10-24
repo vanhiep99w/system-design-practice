@@ -5,11 +5,11 @@ import { isSequenceDiagram, sequenceViewportHeight } from '../src/lib/diagram-pr
 
 const root = new URL('../', import.meta.url);
 const budgets = {
-  'url-shortener': ['120vh', undefined],
+  'url-shortener': [], // The two request paths now use compact flow topology.
   'paste-bin': ['130vh', '180vh', '100vh'],
-  'chat-system': ['100vh', undefined],
+  'chat-system': ['100vh'],
   'news-feed': ['140vh', '190vh'],
-  'rate-limiter': ['140vh', '110vh', '180vh'],
+  'rate-limiter': ['110vh', '180vh'],
 };
 
 test('only root sequence diagrams can opt into a per-diagram height', () => {
@@ -43,8 +43,8 @@ test('sequences have individual measured budgets; short flows and all ER/archite
     }
     assert.deepEqual(sequences, expected, `${slug}: per-flow budgets`);
   }
-  assert.equal(overrides, 10);
-  assert.equal(defaults, 17);
+  assert.equal(overrides, 8);
+  assert.equal(defaults, 19);
   const css = await readFile(new URL('src/app/globals.css', root), 'utf8');
   assert.doesNotMatch(css, /--d2-(?:viewport|preview)-max-height\s*:/, 'no global height override');
   assert.doesNotMatch(css, /d2-sequence-frame|sequence-frame-stroke|mix-blend-mode/, 'shared presentation belongs to docs-kit');
