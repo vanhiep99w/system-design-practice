@@ -95,6 +95,52 @@ for (const slug of designs) {
   });
 }
 
+test('notification-system: preserve blueprint, compile all docs-kit fences and local icons', async () => {
+  const slug = 'notification-system';
+  const content = await readFile(join(root, `${slug}.md`), 'utf8');
+  const sections = [...content.matchAll(/^## (\d+)\./gm)].map(m => Number(m[1]));
+  assert.deepEqual(sections, Array.from({ length: 17 }, (_, i) => i + 1));
+  const blocks = fences(content);
+  assert.equal(blocks.filter(m => m[1] === 'mermaid').length, 0, 'all diagrams use build-time D2');
+  const sequences = blocks.filter(m => /^d2\b/.test(m[1]) && /^shape: sequence_diagram$/m.test(m[2]));
+  assert.ok(sequences.length >= 2, 'core use cases must retain sequence diagrams');
+  assert.equal(blocks.filter(m => /^d2\b/.test(m[1]) && /shape: sql_table/m.test(m[2])).length, 1);
+  const enhanced = blocks.filter(m => /^(d2|protocol-exchange|code-walkthrough|terminal-session|span-waterfall)\b/.test(m[1]));
+  assert.ok(enhanced.filter(m => m[1].startsWith('d2 ')).length >= 5);
+  const prepared = rebaseDiagramIcons(enhanced.map(m => m[0]).join('\n\n'));
+  let tree;
+  const capture = () => result => { tree = result; };
+  const compiled = String(await compile({
+    value: prepared, cwd: root, path: join(root, 'content/docs', `${slug}.md`),
+  }, { remarkPlugins: [...plugins, capture] }));
+  const attribute = (node, name) => {
+    const value = node.attributes.find(a => a.name === name).value;
+    if (typeof value === 'string') return value;
+    const expression = value.data.estree.body[0].expression;
+    return expression.type === 'Literal' ? expression.value : JSON.parse(expression.arguments[0].value);
+  };
+  for (const node of tree.children.filter(n => n.name === 'D2InteractiveDiagram')) {
+    const source = attribute(node, 'source');
+    const frames = [...source.matchAll(/^\s*(?:group_\d+|atomic): "[^"\n]+" \{$/gm)].length;
+    if (!frames) continue;
+    assert.doesNotMatch(source, /fill: transparent|stroke: "#64748b"|stroke-width: 2/, 'use package frame defaults, not per-page copies');
+    for (const [theme, color] of [['lightSvg', '#64748b'], ['darkSvg', '#94a3b8']]) {
+      const svg = attribute(node, theme);
+      assert.match(svg, /data-d2-sequence="true"/);
+      assert.match(svg, /mix-blend-mode:normal;opacity:1/);
+      const borders = svg.match(new RegExp(`<(?:rect|path)\\b[^>]*stroke="${color}"[^>]*fill="transparent"[^>]*style="[^"]*stroke-width:2;`, 'g')) ?? [];
+      assert.equal(borders.length, frames, `${slug}: every frame needs an actual SVG border in ${theme}`);
+    }
+  }
+  assert.ok(compiled.includes('D2InteractiveDiagram'));
+  assert.ok(compiled.includes('ProtocolExchange'));
+  assert.ok(compiled.includes('CodeWalkthrough'));
+  assert.ok(compiled.includes('SpanWaterfall'));
+  assert.ok(compiled.includes('TerminalSession'));
+  assert.ok(compiled.includes('data:image/svg+xml;base64,'), 'icons must be embedded, not fetched by readers');
+  assert.ok(!compiled.includes('https://icons.d2lang.com/'));
+});
+
 test('paste-bin: D2 sequences preserve ordered messages, responses and burn-after-read note', async () => {
   const content = await readFile(join(root, 'paste-bin.md'), 'utf8');
   const sequences = fences(content).filter(m => /^d2\b/.test(m[1]) && /^shape: sequence_diagram$/m.test(m[2]));

@@ -22,7 +22,7 @@ Repository này chứa các bài thực hành thiết kế hệ thống (System 
 |---|---------|------|--------|------------|
 | 4 | Chat System (WhatsApp/Messenger) | [chat-system.md](./chat-system.md) | ⭐⭐⭐ | ✅ Done |
 | 5 | News Feed (Facebook/Twitter) | [news-feed.md](./news-feed.md) | ⭐⭐⭐ | ✅ Done |
-| 6 | Notification System | [notification-system.md](./notification-system.md) | ⭐⭐⭐ | ⬜ Todo |
+| 6 | Notification System | [notification-system.md](./notification-system.md) | ⭐⭐⭐ | ✅ Done |
 | 7 | Search Autocomplete | [search-autocomplete.md](./search-autocomplete.md) | ⭐⭐⭐ | ⬜ Todo |
 | 8 | Web Crawler | [web-crawler.md](./web-crawler.md) | ⭐⭐⭐ | ⬜ Todo |
 
@@ -59,7 +59,7 @@ npm run typecheck
 npm run build
 ```
 
-- **Nguồn chuẩn:** sửa 5 bài `.md` ở root. `content/docs/` được sinh lại bởi `prepare-content`, `predev` và `prebuild`; không sửa bản generated.
+- **Nguồn chuẩn:** sửa 6 bài `.md` ở root. `content/docs/` được sinh lại bởi `prepare-content`, `predev` và `prebuild`; không sửa bản generated.
 - **Static export:** output nằm ở `dist/`, dùng được trên Cloudflare Pages. D2/WASM và syntax highlighting chỉ chạy lúc build, không chạy trong browser.
 - **D2 layout:** mặc định dùng **TALA** cho toàn bộ diagram D2 (`layout: 'tala'` trong `source.config.ts`). Có thể override từng fence bằng `layout=elk` hoặc `layout=dagre`.
 - **D2 viewer:** từ docs-kit `0.9.3`, mở sẵn với icon zoom/fit/fullscreen nổi ở góc phải canvas (không chiếm header), tự fit theo hai chiều; mặc định tối đa `90vh`. Sequence dài có thể đặt **riêng từng diagram** bằng comment `# viewport-height: 140vh` trong source D2 (host convention, không phải syntax cấu hình của D2/docs-kit). Adapter tại `src/mdx-components.tsx` áp cùng mức cho viewer và SSR/no-JS; diagram không có comment giữ nguyên `90vh`. Các flow hiện chọn `100`–`190vh` theo tỷ lệ sau khi fit chiều ngang, không áp một mức chung. Architecture/ER không đổi; fullscreen vẫn cao `90dvh`. Source nằm trong panel nổi từ icon `</>`, không có footer. Site giữ `scale: 1`. Nhãn sequence dài được ngắt dòng, không đổi thứ tự message hay payload trong ví dụ API.

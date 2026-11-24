@@ -23,6 +23,7 @@ const DESIGNS = [
   { file: 'chat-system.md' },
   { file: 'news-feed.md' },
   { file: 'rate-limiter.md' },
+  { file: 'notification-system.md' },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
